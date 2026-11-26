@@ -1,0 +1,43 @@
+name: CI & Build Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-frontend:
+    name: Build & Validate Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Runtime
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck & Build Bundle
+        run: bun run build
+
+  validate-backend:
+    name: Validate Rust Core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies for libudev
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo Check
+        working-directory: ./src-tauri
+        run: cargo check --verbose
