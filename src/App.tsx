@@ -106,6 +106,15 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ]
 
+// Các phím tạo thành hình trái tim hoàn mỹ trên ma trận 75% (Static Record theo chuẩn rule ts-set-map)
+const HEART_KEYS: Record<string, true> = {
+  k_4: true, k_5: true, k_7: true, k_8: true,
+  k_e: true, k_r: true, k_t: true, k_y: true, k_u: true, k_i: true,
+  k_s: true, k_d: true, k_f: true, k_g: true, k_h: true, k_j: true, k_k: true,
+  k_x: true, k_c: true, k_v: true, k_b: true, k_n: true, k_m: true,
+  k_space: true,
+}
+
 // Tọa độ chuẩn hóa (x: 0..1, y: 0..1) của từng switch
 const KEY_COORDINATES: Record<string, { x: number; y: number }> = {}
 const TOTAL_ROWS = KEYBOARD_ROWS.length
@@ -145,8 +154,8 @@ function delay(ms: number): Promise<void> {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('gif')
-  const [selectedColor, setSelectedColor] = useState<string>('#00ffcc')
-  const [selectedMode, setSelectedMode] = useState<number>(0x06) // Default Static
+  const [selectedColor, setSelectedColor] = useState<string>('#ff007f')
+  const [selectedMode, setSelectedMode] = useState<number>(0x05) // Default Breathing
   const [brightness, setBrightness] = useState<number>(100)
   const [speed, setSpeed] = useState<number>(1)
   const [keyColors, setKeyColors] = useState<Record<string, string>>({})
@@ -156,17 +165,17 @@ export default function App() {
 
   // GIF Engine State
   const [isGifPlaying, setIsGifPlaying] = useState<boolean>(false)
-  const [gifFileName, setGifFileName] = useState<string>('💓 Điện Tâm Đồ (aula_s75_ecg.gif)')
-  const [gifFps, setGifFps] = useState<number>(18)
+  const [gifFileName, setGifFileName] = useState<string>('💖 TRÁI TIM PHÍM CƠ (Solid Heart Matrix)')
+  const [gifFps, setGifFps] = useState<number>(15)
   const framesRef = useRef<ParsedFrame[]>([])
   const frameIndexRef = useRef<number>(0)
   const animationTimerRef = useRef<number | null>(null)
   const isPlayingRef = useRef<boolean>(false)
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Khởi tạo nạp sẵn ECG Heartbeat khi vừa mở
+  // Khởi tạo nạp sẵn Trái Tim Ma Trận khi vừa mở
   useEffect(() => {
-    loadEcgPreset()
+    loadSolidHeartPulse()
 
     fetch('/api/led/status')
       .then((r) => r.json())
@@ -187,6 +196,54 @@ export default function App() {
     }
   }, [])
 
+  // Chế độ Trái Tim Đặc (Solid Heart Matrix): Thể hiện rõ nét từng phím tạo thành hình trái tim
+  const loadSolidHeartPulse = () => {
+    stopGifStream()
+    setGifFileName('💖 TRÁI TIM PHÍM CƠ (Solid Heart Matrix)')
+    const width = 32
+    const height = 16
+    const sampleFrames: ParsedFrame[] = []
+
+    for (let f = 0; f < 30; f++) {
+      const patch = new Uint8ClampedArray(width * height * 4)
+      const t = (f / 30) * 2 * Math.PI
+      const pulse = 0.8 + 0.25 * Math.sin(t) // Độ co bóp nhịp tim
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4
+          // Chuẩn hóa tọa độ tâm (-1..1)
+          const nx = ((x - width / 2) / (width / 4)) / pulse
+          const ny = -(((y - height / 2 + 1) / (height / 3))) / pulse
+
+          // Phương trình đường cong trái tim toán học: (x^2 + y^2 - 1)^3 - x^2 * y^3 <= 0
+          const heartEq = Math.pow(nx * nx + ny * ny - 1, 3) - nx * nx * Math.pow(ny, 3)
+
+          if (heartEq <= 0) {
+            // Bên trong trái tim: Hồng/Đỏ Neon rực rỡ
+            patch[idx] = 255 // R
+            patch[idx + 1] = Math.round(20 * pulse) // G
+            patch[idx + 2] = Math.round(140 + 80 * pulse) // B
+            patch[idx + 3] = 255
+          } else {
+            // Bên ngoài: Nền tím thẫm mờ ảo
+            patch[idx] = 18
+            patch[idx + 1] = 8
+            patch[idx + 2] = 35
+            patch[idx + 3] = 255
+          }
+        }
+      }
+
+      sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
+    }
+
+    framesRef.current = sampleFrames
+    frameIndexRef.current = 0
+    setGifFps(15)
+    setLogMessage('[+] ĐÃ NẠP CHẾ ĐỘ TRÁI TIM MA TRẬN! Các phím xếp thành trái tim sẽ sáng rực! Bấm "PHÁT GIF" ngay!')
+  }
+
   // Nạp ảnh GIF Điện Tâm Đồ ECG từ AULA S75 Pro
   const loadEcgPreset = async () => {
     stopGifStream()
@@ -200,9 +257,7 @@ export default function App() {
       framesRef.current = decompressed
       frameIndexRef.current = 0
       setGifFps(18)
-      setLogMessage(
-        `[+] ĐÃ NẠP XONG 289 FRAMES ĐIỆN TÂM ĐỒ ECG! Tỉ lệ 900x341 khớp 100% layout 75%! Bấm "PHÁT GIF" ngay!`
-      )
+      setLogMessage('[+] ĐÃ NẠP XONG 289 FRAMES ĐIỆN TÂM ĐỒ ECG! Bấm "PHÁT GIF" ngay!')
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
       setLogMessage(`[-] Lỗi nạp GIF: ${errMsg}`)
@@ -289,7 +344,7 @@ export default function App() {
   }
 
   // Tải preset thuật toán mẫu
-  const loadPreset = (type: 'flame' | 'rainbow' | 'matrix' | 'neon') => {
+  const loadPreset = (type: 'flame' | 'rainbow' | 'matrix') => {
     stopGifStream()
     const width = 32
     const height = 16
@@ -330,7 +385,7 @@ export default function App() {
         }
         sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
       }
-    } else if (type === 'matrix') {
+    } else {
       setGifFileName('⚡ Preset: Mưa Ký Tự Matrix')
       for (let f = 0; f < 20; f++) {
         const patch = new Uint8ClampedArray(width * height * 4)
@@ -342,22 +397,6 @@ export default function App() {
             patch[idx] = Math.round(intensity * 40)
             patch[idx + 1] = Math.round(intensity * 255)
             patch[idx + 2] = Math.round(intensity * 80)
-            patch[idx + 3] = 255
-          }
-        }
-        sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
-      }
-    } else {
-      setGifFileName('💖 Preset: Nhịp Tim Neon Pulse')
-      for (let f = 0; f < 20; f++) {
-        const patch = new Uint8ClampedArray(width * height * 4)
-        const pulse = (Math.sin(f * 0.314) * 0.5 + 0.5)
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const idx = (y * width + x) * 4
-            patch[idx] = Math.round(pulse * 255)
-            patch[idx + 1] = Math.round(pulse * 30)
-            patch[idx + 2] = Math.round(pulse * 200)
             patch[idx + 3] = 255
           }
         }
@@ -398,13 +437,13 @@ export default function App() {
   // Bắt đầu phát luồng GIF
   const startGifStream = () => {
     if (framesRef.current.length === 0) {
-      loadEcgPreset()
+      loadSolidHeartPulse()
     }
 
     if (isPlayingRef.current) return
     isPlayingRef.current = true
     setIsGifPlaying(true)
-    setLogMessage('[▶] ĐANG PHÁT GIF: Bàn phím đang sáng rực rỡ theo từng frame...')
+    setLogMessage('[▶] ĐANG PHÁT HIỆU ỨNG: Bàn phím đang sáng theo hình khối rực rỡ...')
 
     const interval = Math.round(1000 / gifFps)
     animationTimerRef.current = window.setInterval(async () => {
@@ -426,11 +465,11 @@ export default function App() {
       imgData.data.set(frame.patch)
       ctx.putImageData(imgData, 0, 0)
 
-      // Sample màu cho 81 phím
+      // Sample màu cho 81 phím với bán kính lấy mẫu đa điểm
       const newColors: Record<string, string> = {}
-      let avgR = 0
-      let avgG = 0
-      let avgB = 0
+      let maxR = 0
+      let maxG = 0
+      let maxB = 0
       let keyCount = 0
 
       for (const [keyId, coord] of Object.entries(KEY_COORDINATES)) {
@@ -440,28 +479,27 @@ export default function App() {
 
         const hex = `#${((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1)}`
         newColors[keyId] = hex
-        avgR += pixel[0]
-        avgG += pixel[1]
-        avgB += pixel[2]
+
+        if (HEART_KEYS[keyId]) {
+          maxR = Math.max(maxR, pixel[0])
+          maxG = Math.max(maxG, pixel[1])
+          maxB = Math.max(maxB, pixel[2])
+        }
         keyCount++
       }
 
       setKeyColors(newColors)
 
-      // Gửi đồng bộ sang phím thật qua Native Bridge
+      // Đồng bộ nhịp thở màu hồng/đỏ xuống bàn phím thật
       if (keyCount > 0) {
-        const meanR = Math.round(avgR / keyCount)
-        const meanG = Math.round(avgG / keyCount)
-        const meanB = Math.round(avgB / keyCount)
-
         fetch('/api/led/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 0x06,
-            r: meanR,
-            g: meanG,
-            b: meanB,
+            r: maxR || 255,
+            g: maxG || 0,
+            b: maxB || 128,
             brightness: Math.round((brightness / 100) * 255),
             speed: 1,
           }),
@@ -475,7 +513,7 @@ export default function App() {
     animationTimerRef.current = null
     isPlayingRef.current = false
     setIsGifPlaying(false)
-    setLogMessage('[⏹] Đã dừng phát GIF.')
+    setLogMessage('[⏹] Đã dừng phát hiệu ứng.')
   }
 
   // Nạp cấu hình màu sang vi điều khiển (Ưu tiên Native Bridge -> Fallback WebHID)
@@ -492,7 +530,6 @@ export default function App() {
 
     setLogMessage('[*] Đang gửi lệnh nạp màu tới bàn phím ATAS K81...')
 
-    // CÁCH 1: Thử gửi qua Native Bridge
     try {
       const resp = await fetch('/api/led/apply', {
         method: 'POST',
@@ -518,10 +555,9 @@ export default function App() {
         }
       }
     } catch {
-      // Fallback xuống WebHID nếu Native Bridge không phản hồi
+      // Fallback
     }
 
-    // CÁCH 2: Fallback qua WebHID
     if (activeDevice && activeDevice.opened) {
       try {
         await sendHidPacket(activeDevice, [0x55, 0x01])
@@ -567,8 +603,8 @@ export default function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="brand">
-          <h1>ATAS K81 <span>STUDIO & GIF STREAMER</span></h1>
-          <p className="subtitle">Chỉnh LED RGB & Phát ảnh GIF động chuyên nghiệp theo phong cách Hoàng Phúc Studio</p>
+          <h1>ATAS K81 <span>STUDIO & MATRIX ENGINE</span></h1>
+          <p className="subtitle">Mô phỏng ma trận LED phím cơ & Stream chuyển động chuyên nghiệp</p>
         </div>
         <div className="header-actions">
           <div className="tab-switcher">
@@ -577,7 +613,7 @@ export default function App() {
               className={`tab-btn ${activeTab === 'gif' ? 'active' : ''}`}
               onClick={() => setActiveTab('gif')}
             >
-              🎬 PHÁT ẢNH GIF
+              💖 HIỆU ỨNG TRÁI TIM & GIF
             </button>
             <button
               type="button"
@@ -606,17 +642,18 @@ export default function App() {
                 {row.map((k) => {
                   const isKnob = k.id === 'k_knob'
                   const color = keyColors[k.id] || (selectedMode === 0x06 ? selectedColor : '#00ffcc')
+                  const isHeartKey = Boolean(HEART_KEYS[k.id])
 
                   return (
                     <button
                       key={k.id}
                       type="button"
-                      className={`keycap ${isKnob ? 'knob' : ''}`}
+                      className={`keycap ${isKnob ? 'knob' : ''} ${isHeartKey && isGifPlaying ? 'heart-pulse' : ''}`}
                       style={{
                         flex: k.width || 1,
                         backgroundColor: color,
                         boxShadow: `0 0 16px ${color}aa, inset 0 0 10px rgba(255, 255, 255, 0.3)`,
-                        borderColor: '#ffffff55',
+                        borderColor: isHeartKey && isGifPlaying ? '#ff007f' : '#ffffff44',
                       }}
                       onClick={() => setKeyColors((prev) => ({ ...prev, [k.id]: selectedColor }))}
                     >
@@ -634,19 +671,22 @@ export default function App() {
           {activeTab === 'gif' ? (
             <>
               <div className="panel-group">
-                <h3>1. Chọn Hiệu Ứng GIF</h3>
+                <h3>1. Chọn Hiệu Ứng Bàn Phím</h3>
                 
                 <div className="preview-canvas-box">
                   <canvas ref={previewCanvasRef} className="preview-canvas" width={32} height={16} />
-                  <span className="preview-label">Bản xem trước Frame</span>
+                  <span className="preview-label">Bản xem trước Ma trận (Matrix Canvas)</span>
                 </div>
 
                 <div className="preset-grid">
+                  <button type="button" className="preset-pill highlight-heart-pulse" onClick={loadSolidHeartPulse}>
+                    💖 TRÁI TIM PHÍM CƠ (Solid Heart)
+                  </button>
                   <button type="button" className="preset-pill highlight-ecg" onClick={loadEcgPreset}>
-                    💓 Điện Tâm Đồ ECG (AULA S75 Pro)
+                    💓 Điện Tâm Đồ ECG (Aula S75)
                   </button>
                   <button type="button" className="preset-pill highlight-heart" onClick={loadHeartPreset}>
-                    💜 Trái Tim Tím (purple_heart.gif)
+                    💜 Trái Tim Tím (Python GIF)
                   </button>
                   <button type="button" className="preset-pill" onClick={() => loadPreset('flame')}>
                     🔥 Lửa Cyber
@@ -656,9 +696,6 @@ export default function App() {
                   </button>
                   <button type="button" className="preset-pill" onClick={() => loadPreset('matrix')}>
                     ⚡ Matrix Xanh
-                  </button>
-                  <button type="button" className="preset-pill" onClick={() => loadPreset('neon')}>
-                    💖 Neon Pulse
                   </button>
                 </div>
 
@@ -704,11 +741,11 @@ export default function App() {
               <div className="gif-action-row">
                 {!isGifPlaying ? (
                   <button type="button" className="btn-apply pulse" onClick={startGifStream}>
-                    ▶ PHÁT GIF LÊN BÀN PHÍM
+                    ▶ PHÁT HIỆU ỨNG LÊN PHÍM
                   </button>
                 ) : (
                   <button type="button" className="btn-stop" onClick={stopGifStream}>
-                    ⏹ DỪNG PHÁT GIF
+                    ⏹ DỪNG HIỆU ỨNG
                   </button>
                 )}
               </div>

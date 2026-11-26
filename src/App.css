@@ -159,6 +159,12 @@ body {
   transform: translateY(1px);
 }
 
+.keycap.heart-pulse {
+  transform: scale(1.04);
+  box-shadow: 0 0 22px #ff007f, inset 0 0 10px rgba(255, 255, 255, 0.5) !important;
+  z-index: 2;
+}
+
 .keycap.knob {
   border-radius: 50%;
 }
@@ -235,6 +241,19 @@ body {
   background: #243252;
   border-color: var(--accent-color);
   color: var(--accent-color);
+}
+
+.preset-pill.highlight-heart-pulse {
+  grid-column: span 2;
+  background: linear-gradient(135deg, #ff007f, #db2777);
+  color: #fff;
+  border: 1px solid #f472b6;
+  font-size: 0.85rem;
+}
+
+.preset-pill.highlight-heart-pulse:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 18px rgba(255, 0, 127, 0.6);
 }
 
 .preset-pill.highlight-ecg {
