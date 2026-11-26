@@ -5,12 +5,11 @@ import './App.css'
 interface KeyDef {
   id: string
   label: string
-  width?: number // relative key width (1 = 1u)
+  width?: number
 }
 
-// Layout ANSI 75% chuẩn cho ATAS K81 (81 phím + Knob)
+// Layout ANSI 75% chuẩn cho ATAS K81
 const KEYBOARD_ROWS: KeyDef[][] = [
-  // Hàng F
   [
     { id: 'k_esc', label: 'ESC' },
     { id: 'k_f1', label: 'F1' },
@@ -28,7 +27,6 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_del', label: 'DEL' },
     { id: 'k_knob', label: 'KNOB', width: 1.2 },
   ],
-  // Hàng số
   [
     { id: 'k_grave', label: '~ `' },
     { id: 'k_1', label: '1' },
@@ -46,7 +44,6 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_backspace', label: 'BACKSPACE', width: 2 },
     { id: 'k_pageup', label: 'PG UP' },
   ],
-  // Hàng QWERTY
   [
     { id: 'k_tab', label: 'TAB', width: 1.5 },
     { id: 'k_q', label: 'Q' },
@@ -64,7 +61,6 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_backslash', label: '\\ |', width: 1.5 },
     { id: 'k_pagedown', label: 'PG DN' },
   ],
-  // Hàng ASDF
   [
     { id: 'k_caps', label: 'CAPS', width: 1.75 },
     { id: 'k_a', label: 'A' },
@@ -81,7 +77,6 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_enter', label: 'ENTER', width: 2.25 },
     { id: 'k_end', label: 'END' },
   ],
-  // Hàng ZXCV
   [
     { id: 'k_lshift', label: 'SHIFT', width: 2.25 },
     { id: 'k_z', label: 'Z' },
@@ -97,7 +92,6 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_rshift', label: 'SHIFT', width: 1.75 },
     { id: 'k_up', label: '↑' },
   ],
-  // Hàng Bottom
   [
     { id: 'k_lctrl', label: 'CTRL', width: 1.25 },
     { id: 'k_win', label: 'WIN', width: 1.25 },
@@ -111,98 +105,167 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ]
 
+// Mapping 12 chế độ chuẩn firmware ATAS YJS MCU
 const LED_MODES = [
-  { id: 1, name: 'Static (Cố định)' },
-  { id: 2, name: 'Breathing (Thở)' },
-  { id: 3, name: 'Wave (Sóng cầu vồng)' },
-  { id: 4, name: 'Ripple (Lan tỏa)' },
-  { id: 5, name: 'Custom Per-Key (Từng phím)' },
+  { id: 0x06, name: 'Cố định (Static)' },
+  { id: 0x05, name: 'Nhịp thở (Breathing)' },
+  { id: 0x00, name: 'Sóng cuộn 1 (Wave 1)' },
+  { id: 0x03, name: 'Sóng cuộn 2 (Wave 2)' },
+  { id: 0x02, name: 'Quang phổ RGB (Spectrum)' },
+  { id: 0x07, name: 'Lan tỏa (Proliferate / Ripple)' },
+  { id: 0x09, name: 'Sao lấp lánh (Shining)' },
+  { id: 0x0A, name: 'Vòng xoay (Ring Running)' },
+  { id: 0x0B, name: 'Đèn chạy (Runners Lamp)' },
 ]
 
+function delay(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setTimeout(resolve, ms)
+  return promise
+}
+
 export default function App() {
-  const [selectedColor, setSelectedColor] = useState<string>('#00ffcc')
-  const [selectedMode, setSelectedMode] = useState<number>(1)
-  const [brightness, setBrightness] = useState<number>(80)
-  const [speed, setSpeed] = useState<number>(3)
+  const [selectedColor, setSelectedColor] = useState<string>('#9820cf')
+  const [selectedMode, setSelectedMode] = useState<number>(0x00) // Default Wave 1
+  const [brightness, setBrightness] = useState<number>(80) // 0-100%
+  const [speed, setSpeed] = useState<number>(3) // 1-4
   const [keyColors, setKeyColors] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [deviceConnected, setDeviceConnected] = useState<boolean>(false)
-  const [logMessage, setLogMessage] = useState<string>('Chờ kết nối thiết bị ATAS K81...')
-  const [hidDevice, setHidDevice] = useState<HIDDevice | null>(null)
+  const [logMessage, setLogMessage] = useState<string>('Sẵn sàng kết nối ATAS K81...')
+  const [activeDevice, setActiveDevice] = useState<HIDDevice | null>(null)
 
-  // Kết nối WebHID trực tiếp từ trình duyệt
+  // Kết nối WebHID với tự động tìm Interface Vendor-Defined (0xFF00)
   const connectWebHID = async () => {
     if (!('hid' in navigator)) {
-      setLogMessage('Trình duyệt không hỗ trợ WebHID API. Dùng Chrome/Edge hoặc chạy app Desktop.')
+      setLogMessage('Trình duyệt không hỗ trợ WebHID API. Hãy dùng Chrome/Edge/Brave.')
       return
     }
 
     try {
-      const devices = await navigator.hid.requestDevice({
+      setLogMessage('Đang mở hộp thoại chọn thiết bị...')
+      const requested = await navigator.hid.requestDevice({
         filters: [{ vendorId: 0x5566, productId: 0x000a }],
       })
 
-      if (devices.length > 0) {
-        const dev = devices[0]
-        await dev.open()
-        setHidDevice(dev)
-        setDeviceConnected(true)
-        setLogMessage(`[+] Đã kết nối thành công: ${dev.productName} (0x5566:0x000A)`)
+      if (!requested || requested.length === 0) {
+        setLogMessage('[-] Người dùng đã hủy chọn thiết bị.')
+        return
       }
+
+      // Lấy tất cả thiết bị đã được cấp quyền
+      const allDevices = await navigator.hid.getDevices()
+      const matching = allDevices.filter(
+        (d) => d.vendorId === 0x5566 && d.productId === 0x000a
+      )
+
+      // Ưu tiên chọn interface có Usage Page 0xFF00 (Vendor-defined)
+      let targetDev: HIDDevice = matching[0]
+      for (const dev of matching) {
+        const hasVendorPage = dev.collections?.some((c) => c.usagePage === 0xff00)
+        if (hasVendorPage) {
+          targetDev = dev
+          break
+        }
+      }
+
+      if (!targetDev.opened) {
+        await targetDev.open()
+      }
+
+      setActiveDevice(targetDev)
+      setDeviceConnected(true)
+      setLogMessage(
+        `[+] Đã kết nối thành công: ${targetDev.productName || 'ATAS K81'} (VID: 0x5566, PID: 0x000A)`
+      )
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
       setLogMessage(`[-] Lỗi kết nối WebHID: ${errMsg}`)
     }
   }
 
-  // Khi bấm vào 1 phím trên bàn phím ảo
-  const handleKeyClick = (keyId: string) => {
-    setActiveKey(keyId)
-    setKeyColors((prev) => ({
-      ...prev,
-      [keyId]: selectedColor,
-    }))
-  }
+  // Helper gửi gói tin 64 byte qua Output Report (sendReport) với fallback sendFeatureReport
+  const sendHidPacket = async (device: HIDDevice, payload: number[]) => {
+    const packet = new Uint8Array(64)
+    for (let i = 0; i < Math.min(payload.length, 64); i++) {
+      packet[i] = payload[i]
+    }
 
-  // Chuyển mã hex thành RGB bytes
-  const hexToRgb = (hex: string) => {
-    const cleaned = hex.replace('#', '')
-    const num = parseInt(cleaned, 16)
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255,
+    try {
+      // Cách 1: Gửi qua Output Report (Endpoint Interrupt Out 64 bytes)
+      await device.sendReport(0x00, packet)
+    } catch {
+      // Fallback: Thử Feature Report nếu thiết bị yêu cầu
+      await device.sendFeatureReport(0x00, packet)
     }
   }
 
-  // Gửi cấu hình LED xuống thiết bị
+  // Quy trình gửi cấu hình LED 4 bước chuẩn ATAS / YJS Firmware
   const sendConfigToKeyboard = async () => {
-    const rgb = hexToRgb(selectedColor)
-    setLogMessage(`[*] Đang truyền cấu hình LED xuống MCU: Mode=${selectedMode}, Brightness=${brightness}%...`)
+    if (!activeDevice || !activeDevice.opened) {
+      setLogMessage('[!] Chưa kết nối bàn phím. Vui lòng bấm nút "KẾT NỐI ATAS K81" trước!')
+      return
+    }
 
-    if (hidDevice && hidDevice.opened) {
-      try {
-        // Tạo Frame 64 Bytes chuẩn Enterprise
-        const packet = new Uint8Array(64)
-        packet[0] = 0x5a // Magic Byte
-        packet[1] = 0x02 // CMD: SET_GLOBAL_LED
-        packet[2] = 0x01 // SEQ ID
-        packet[3] = 0x06 // Length
-        packet[4] = selectedMode
-        packet[5] = brightness
-        packet[6] = speed
-        packet[7] = rgb.r
-        packet[8] = rgb.g
-        packet[9] = rgb.b
+    try {
+      setLogMessage('[*] Đang gửi handshake & nạp cấu hình LED...')
 
-        await hidDevice.sendFeatureReport(0x00, packet)
-        setLogMessage('[+] Đã gửi cấu hình thành công qua cổng WebHID!')
-      } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        setLogMessage(`[-] Lỗi khi bắn packet HID: ${errMsg}`)
+      // 1. Handshake 1: [0x55, 0x01]
+      await sendHidPacket(activeDevice, [0x55, 0x01])
+      await delay(15)
+
+      // 2. Handshake 2: [0x55, 0x05, 0x00, 0x20, 0x20]
+      await sendHidPacket(activeDevice, [0x55, 0x05, 0x00, 0x20, 0x20])
+      await delay(15)
+
+      // 3. Gói tin cấu hình chính (0x55 0x06)
+      const numColor = parseInt(selectedColor.replace('#', ''), 16)
+      const r = (numColor >> 16) & 255
+      const g = (numColor >> 8) & 255
+      const b = numColor & 255
+
+      const rawBrightness = Math.round((brightness / 100) * 255)
+      let effectiveSpeed = Math.max(1, Math.min(speed, 4))
+
+      // Một số mode cố định tốc độ = 1 theo firmware specification
+      const fixedSpeedModes = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09]
+      if (fixedSpeedModes.includes(selectedMode)) {
+        effectiveSpeed = 1
       }
-    } else {
-      setLogMessage('[!] Chưa kết nối trực tiếp bàn phím qua WebHID. Hãy bấm nút "Kết nối ATAS K81".')
+
+      const cmd = new Array(64).fill(0)
+      cmd[0] = 0x55
+      cmd[1] = 0x06
+      cmd[2] = 0x00
+      cmd[4] = 0x20
+      cmd[10] = selectedMode
+      cmd[11] = rawBrightness
+      cmd[12] = effectiveSpeed
+      cmd[13] = 0x00
+      cmd[14] = selectedMode === 0x06 ? 0x00 : 0x01 // 0x00 cho static, 0x01 cho dynamic
+      cmd[16] = r
+      cmd[17] = g
+      cmd[18] = b
+
+      // Checksum = Tổng từ index 4 đến 63 & 0xFF
+      let sum = 0
+      for (let i = 4; i < 64; i++) {
+        sum += cmd[i]
+      }
+      cmd[3] = sum & 0xff
+
+      await sendHidPacket(activeDevice, cmd)
+      await delay(15)
+
+      // 4. End sequence: [0x55, 0x02]
+      await sendHidPacket(activeDevice, [0x55, 0x02])
+
+      setLogMessage(
+        `[+] THÀNH CÔNG! Đã nạp cấu hình LED vào vi điều khiển: Mode=0x0${selectedMode.toString(16).toUpperCase()}, Màu=${selectedColor.toUpperCase()}, Độ sáng=${brightness}%`
+      )
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      setLogMessage(`[-] Lỗi gửi lệnh xuống bàn phím: ${errMsg}`)
     }
   }
 
@@ -232,7 +295,7 @@ export default function App() {
               <div key={row[0].id} className="keyboard-row">
                 {row.map((k) => {
                   const isKnob = k.id === 'k_knob'
-                  const color = keyColors[k.id] || (selectedMode === 1 ? selectedColor : '#222')
+                  const color = keyColors[k.id] || (selectedMode === 0x06 ? selectedColor : '#00ffcc')
                   const isSelected = activeKey === k.id
 
                   return (
@@ -245,7 +308,10 @@ export default function App() {
                         boxShadow: `0 0 12px ${color}88, inset 0 0 6px ${color}55`,
                         borderColor: isSelected ? '#fff' : `${color}aa`,
                       }}
-                      onClick={() => handleKeyClick(k.id)}
+                      onClick={() => {
+                        setActiveKey(k.id)
+                        setKeyColors((prev) => ({ ...prev, [k.id]: selectedColor }))
+                      }}
                     >
                       <span className="key-label">{k.label}</span>
                       <span className="led-indicator" style={{ backgroundColor: color }} />
@@ -257,7 +323,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Thanh công cụ điều khiển LED */}
+        {/* Bảng điều khiển */}
         <aside className="control-panel">
           <div className="panel-group">
             <h3>1. Chế độ Ánh Sáng (Lighting Mode)</h3>
@@ -305,7 +371,7 @@ export default function App() {
             <input
               type="range"
               min="1"
-              max="5"
+              max="4"
               value={speed}
               onChange={(e) => setSpeed(Number(e.target.value))}
               className="slider"
