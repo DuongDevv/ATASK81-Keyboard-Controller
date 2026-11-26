@@ -90,7 +90,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_dot', label: '> .' },
     { id: 'k_slash', label: '? /' },
     { id: 'k_rshift', label: 'SHIFT', width: 1.75 },
-    { id: 'k_up', label: '↑' },
+    { id: 'k_up', label: 'UP' },
   ],
   [
     { id: 'k_lctrl', label: 'CTRL', width: 1.25 },
@@ -99,38 +99,38 @@ const KEYBOARD_ROWS: KeyDef[][] = [
     { id: 'k_space', label: 'SPACE', width: 6.25 },
     { id: 'k_ralt', label: 'ALT' },
     { id: 'k_fn', label: 'FN' },
-    { id: 'k_left', label: '←' },
-    { id: 'k_down', label: '↓' },
-    { id: 'k_right', label: '→' },
+    { id: 'k_left', label: 'LEFT' },
+    { id: 'k_down', label: 'DOWN' },
+    { id: 'k_right', label: 'RIGHT' },
   ],
 ]
 
-// Opcode mapping for YJS MicroChip hardware animation modes (0x00 - 0x0B)
+// Hardware lighting animation mode definitions supported by YJS MicroChip MCU
 const FIRMWARE_MODES = [
-  { id: 0x06, name: 'Cố định (Fixed / Static)' },
-  { id: 0x05, name: 'Nhịp thở (Breathing)' },
-  { id: 0x00, name: 'Sóng cuộn 1 (Wave Mode 1)' },
-  { id: 0x03, name: 'Sóng cuộn 2 (Wave Mode 2)' },
-  { id: 0x01, name: 'Sóng ánh sáng (Wave Light)' },
-  { id: 0x02, name: 'Quang phổ RGB (Spectrum)' },
-  { id: 0x07, name: 'Lan tỏa (Proliferate / Ripple)' },
-  { id: 0x08, name: 'Tia đơn tâm (One Line Radial)' },
-  { id: 0x09, name: 'Sao lấp lánh (Shinning)' },
-  { id: 0x0a, name: 'Vòng xoay (Ring Running)' },
-  { id: 0x0b, name: 'Đèn chạy (Runners Lamp)' },
-  { id: 0x04, name: 'Đột biến (Mutant)' },
+  { id: 0x06, name: 'Fixed / Static' },
+  { id: 0x05, name: 'Breathing' },
+  { id: 0x00, name: 'Wave Mode 1' },
+  { id: 0x03, name: 'Wave Mode 2' },
+  { id: 0x01, name: 'Wave Light' },
+  { id: 0x02, name: 'RGB Spectrum' },
+  { id: 0x07, name: 'Proliferate / Ripple' },
+  { id: 0x08, name: 'One Line Radial' },
+  { id: 0x09, name: 'Shining Stars' },
+  { id: 0x0a, name: 'Ring Running' },
+  { id: 0x0b, name: 'Runners Lamp' },
+  { id: 0x04, name: 'Mutant Cycle' },
 ]
 
-// Preset color chips for rapid palette selection
+// Standard quick-select color palette
 const QUICK_PALETTE = [
-  { name: 'Tím Neon', hex: '#9820CF' },
-  { name: 'Hồng Cyber', hex: '#EC4899' },
-  { name: 'Xanh Ngọc', hex: '#00FFCC' },
-  { name: 'Xanh Biển', hex: '#3B82F6' },
-  { name: 'Đỏ Lửa', hex: '#EF4444' },
-  { name: 'Cam Rực', hex: '#F97316' },
-  { name: 'Vàng Chanh', hex: '#FACC15' },
-  { name: 'Trắng Băng', hex: '#FFFFFF' },
+  { name: 'Neon Purple', hex: '#9820CF' },
+  { name: 'Cyber Pink', hex: '#EC4899' },
+  { name: 'Aqua Cyan', hex: '#00FFCC' },
+  { name: 'Deep Blue', hex: '#3B82F6' },
+  { name: 'Crimson Red', hex: '#EF4444' },
+  { name: 'Amber Orange', hex: '#F97316' },
+  { name: 'Citrus Yellow', hex: '#FACC15' },
+  { name: 'Pure White', hex: '#FFFFFF' },
 ]
 
 function delay(ms: number): Promise<void> {
@@ -326,7 +326,7 @@ export default function App() {
             className={`btn-connect ${deviceConnected ? 'connected' : ''}`}
             onClick={connectWebHID}
           >
-            {deviceConnected ? '● CONNECTED (ATAS K81)' : '⚡ CONNECT ATAS K81'}
+            {deviceConnected ? 'CONNECTED' : 'CONNECT DEVICE'}
           </button>
         </div>
       </header>
@@ -349,7 +349,7 @@ export default function App() {
                         flex: k.width || 1,
                         backgroundColor: selectedColor,
                         boxShadow: `0 0 16px ${selectedColor}aa, inset 0 0 10px rgba(255, 255, 255, 0.3)`,
-                        borderColor: '#ffffff55',
+                        borderColor: '#ffffff44',
                       }}
                       onClick={() => applyLighting()}
                     >
@@ -365,7 +365,7 @@ export default function App() {
         {/* Control and configuration dashboard */}
         <aside className="control-panel">
           <div className="panel-group">
-            <h3>1. Chế độ Ánh Sáng (12 Firmware Modes)</h3>
+            <h3>Lighting Mode (12 Hardware Presets)</h3>
             <div className="mode-selector">
               {FIRMWARE_MODES.map((mode) => (
                 <button
@@ -381,7 +381,7 @@ export default function App() {
           </div>
 
           <div className="panel-group">
-            <h3>2. Bảng Màu (Color Palette)</h3>
+            <h3>Color Palette</h3>
             <div className="color-tools">
               <input
                 type="color"
@@ -408,7 +408,7 @@ export default function App() {
           </div>
 
           <div className="panel-group">
-            <h3>3. Độ Sáng ({brightness}%)</h3>
+            <h3>Brightness ({brightness}%)</h3>
             <input
               type="range"
               min="0"
@@ -420,7 +420,7 @@ export default function App() {
           </div>
 
           <div className="panel-group">
-            <h3>4. Tốc Độ Hiệu Ứng ({speed})</h3>
+            <h3>Animation Speed ({speed})</h3>
             <input
               type="range"
               min="1"
@@ -433,25 +433,25 @@ export default function App() {
 
           <button
             type="button"
-            className="btn-apply pulse"
+            className="btn-apply"
             onClick={applyLighting}
           >
-            🚀 NẠP CẤU HÌNH VÀO PHÍM (APPLY)
+            APPLY CONFIGURATION
           </button>
 
           {/* Flash memory persistence reference */}
           <div className="flash-guide-card">
-            <h4>💡 CẨM NANG LƯU MÀU KHI DÙNG KHÔNG DÂY</h4>
+            <h4>HARDWARE SHORTCUTS & EEPROM PERSISTENCE</h4>
             <p className="guide-desc">
-              Khi dùng đầu USB 2.4G không dây, hãy dùng phím tắt phần cứng để chip lưu vĩnh viễn vào bộ nhớ Flash:
+              When operating over 2.4GHz wireless, configuration changes must be committed directly via hardware shortcuts to persist across power cycles:
             </p>
             <ul className="guide-list">
-              <li><code>Fn + Enter</code> : Đổi màu cố định (Bấm đến màu Tím là lưu vĩnh viễn!)</li>
-              <li><code>Fn + \</code> : Đổi qua lại giữa các hiệu ứng LED</li>
-              <li><code>Fn + ↑ / ↓</code> : Tăng / giảm độ sáng</li>
-              <li><code>Fn + ← / →</code> : Tăng / giảm tốc độ chạy LED</li>
-              <li><code>Giữ núm 3s</code> : Đổi giữa chỉnh Volume & Chỉnh LED</li>
-              <li><code>Fn + Space</code> : Giữ 3 giây để khôi phục mặc định (Reset)</li>
+              <li><code>Fn + Enter</code> : Cycle static colors (persists to onboard Flash)</li>
+              <li><code>Fn + \</code> : Cycle lighting modes</li>
+              <li><code>Fn + Up / Down</code> : Adjust brightness level</li>
+              <li><code>Fn + Left / Right</code> : Adjust animation speed</li>
+              <li><code>Knob (Hold 3s)</code> : Toggle knob between Volume and Lighting mode</li>
+              <li><code>Fn + Space (Hold 3s)</code> : Factory reset controller</li>
             </ul>
           </div>
         </aside>
