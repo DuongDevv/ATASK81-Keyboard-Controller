@@ -144,19 +144,19 @@ function delay(ms: number): Promise<void> {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'gif' | 'firmware'>('gif')
+  const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('firmware')
   const [selectedColor, setSelectedColor] = useState<string>('#9820cf')
-  const [selectedMode, setSelectedMode] = useState<number>(0x00)
-  const [brightness, setBrightness] = useState<number>(85)
-  const [speed, setSpeed] = useState<number>(3)
+  const [selectedMode, setSelectedMode] = useState<number>(0x06) // Default Static Red/Purple
+  const [brightness, setBrightness] = useState<number>(100)
+  const [speed, setSpeed] = useState<number>(1)
   const [keyColors, setKeyColors] = useState<Record<string, string>>({})
   const [deviceConnected, setDeviceConnected] = useState<boolean>(false)
-  const [logMessage, setLogMessage] = useState<string>('Sẵn sàng kết nối ATAS K81...')
+  const [logMessage, setLogMessage] = useState<string>('Đang kiểm tra kết nối phần cứng...')
   const [activeDevice, setActiveDevice] = useState<HIDDevice | null>(null)
 
   // GIF Engine State
   const [isGifPlaying, setIsGifPlaying] = useState<boolean>(false)
-  const [gifFileName, setGifFileName] = useState<string>('Chưa chọn (dùng Preset có sẵn)')
+  const [gifFileName, setGifFileName] = useState<string>('🔥 Preset: Ngọn Lửa Cyberpunk')
   const [gifFps, setGifFps] = useState<number>(12)
   const framesRef = useRef<ParsedFrame[]>([])
   const frameIndexRef = useRef<number>(0)
@@ -164,18 +164,33 @@ export default function App() {
   const isPlayingRef = useRef<boolean>(false)
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Khởi tạo preset mặc định khi vừa mở app
+  // Tự động kiểm tra Native Bridge (kết nối trực tiếp qua Linux /dev/hidraw5)
   useEffect(() => {
     loadPreset('flame')
+
+    fetch('/api/led/status')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.connected) {
+          setDeviceConnected(true)
+          setLogMessage(`[+] ĐÃ TỰ ĐỘNG KẾT NỐI: ATAS K81 phát hiện tại ${data.path} (Native Bridge)`)
+        } else {
+          setLogMessage('[*] Native Bridge chưa mở. Hãy dùng nút WebHID để cấp quyền.')
+        }
+      })
+      .catch(() => {
+        setLogMessage('Sẵn sàng kết nối qua WebHID...')
+      })
+
     return () => {
       clearInterval(animationTimerRef.current ?? undefined)
     }
   }, [])
 
-  // Kết nối WebHID với thiết bị ATAS K81
+  // Kết nối WebHID thủ công nếu không chạy qua Native Bridge
   const connectWebHID = async () => {
     if (!('hid' in navigator)) {
-      setLogMessage('Trình duyệt không hỗ trợ WebHID. Hãy dùng Chrome/Edge/Brave.')
+      setLogMessage('Trình duyệt không hỗ trợ WebHID. Dùng Chrome/Edge/Brave.')
       return
     }
 
@@ -210,7 +225,7 @@ export default function App() {
       setActiveDevice(targetDev)
       setDeviceConnected(true)
       setLogMessage(
-        `[+] Đã kết nối: ${targetDev.productName || 'ATAS K81'} (VID: 0x5566, PID: 0x000A)`
+        `[+] Đã kết nối WebHID: ${targetDev.productName || 'ATAS K81'} (VID: 0x5566, PID: 0x000A)`
       )
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -231,7 +246,7 @@ export default function App() {
     }
   }
 
-  // Tải các hiệu ứng mẫu cực đẹp
+  // Tải preset mẫu
   const loadPreset = (type: 'flame' | 'rainbow' | 'matrix' | 'neon') => {
     stopGifStream()
     const width = 32
@@ -248,9 +263,9 @@ export default function App() {
             const heat = Math.sin(x * 0.35 + f * 0.4) * 0.5 + Math.cos(y * 0.5 - f * 0.3) * 0.5
             const intensity = Math.max(0, Math.min(1, heat + (1 - y / height) * 0.9))
 
-            patch[idx] = Math.round(intensity * 255) // R
-            patch[idx + 1] = Math.round(Math.pow(intensity, 2) * 140) // G
-            patch[idx + 2] = Math.round(Math.max(0, 1 - intensity) * 60) // B
+            patch[idx] = Math.round(intensity * 255)
+            patch[idx + 1] = Math.round(Math.pow(intensity, 2) * 140)
+            patch[idx + 2] = Math.round(Math.max(0, 1 - intensity) * 60)
             patch[idx + 3] = 255
           }
         }
@@ -265,20 +280,16 @@ export default function App() {
           for (let x = 0; x < width; x++) {
             const idx = (y * width + x) * 4
             const hue = (x / width + offset) % 1
-            const r = Math.round((Math.sin(hue * 6.28) * 0.5 + 0.5) * 255)
-            const g = Math.round((Math.sin(hue * 6.28 + 2.09) * 0.5 + 0.5) * 255)
-            const b = Math.round((Math.sin(hue * 6.28 + 4.18) * 0.5 + 0.5) * 255)
-
-            patch[idx] = r
-            patch[idx + 1] = g
-            patch[idx + 2] = b
+            patch[idx] = Math.round((Math.sin(hue * 6.28) * 0.5 + 0.5) * 255)
+            patch[idx + 1] = Math.round((Math.sin(hue * 6.28 + 2.09) * 0.5 + 0.5) * 255)
+            patch[idx + 2] = Math.round((Math.sin(hue * 6.28 + 4.18) * 0.5 + 0.5) * 255)
             patch[idx + 3] = 255
           }
         }
         sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
       }
     } else if (type === 'matrix') {
-      setGifFileName('⚡ Preset: Mưa Ký Tự Matrix Xanh')
+      setGifFileName('⚡ Preset: Mưa Ký Tự Matrix')
       for (let f = 0; f < 20; f++) {
         const patch = new Uint8ClampedArray(width * height * 4)
         for (let y = 0; y < height; y++) {
@@ -286,7 +297,6 @@ export default function App() {
             const idx = (y * width + x) * 4
             const drop = ((y - f * 1.5 + x * 3) % height + height) % height
             const intensity = Math.max(0, 1 - drop / 5)
-
             patch[idx] = Math.round(intensity * 40)
             patch[idx + 1] = Math.round(intensity * 255)
             patch[idx + 2] = Math.round(intensity * 80)
@@ -315,7 +325,7 @@ export default function App() {
 
     framesRef.current = sampleFrames
     frameIndexRef.current = 0
-    setLogMessage(`[+] Đã tải ${sampleFrames.length} frames (${gifFileName}). Bấm "PHÁT GIF" để xem!`)
+    setLogMessage(`[+] Đã tải preset: ${gifFileName}. Bấm "PHÁT GIF" để xem!`)
   }
 
   // Tải file GIF tùy ý từ máy tính
@@ -352,7 +362,7 @@ export default function App() {
     if (isPlayingRef.current) return
     isPlayingRef.current = true
     setIsGifPlaying(true)
-    setLogMessage('[▶] ĐANG PHÁT GIF: Bàn phím ảo đang sáng rực rỡ theo từng frame...')
+    setLogMessage('[▶] ĐANG PHÁT GIF: Bàn phím đang sáng rực rỡ theo từng frame...')
 
     const interval = Math.round(1000 / gifFps)
     animationTimerRef.current = window.setInterval(async () => {
@@ -374,7 +384,7 @@ export default function App() {
       imgData.data.set(frame.patch)
       ctx.putImageData(imgData, 0, 0)
 
-      // Sample màu chuẩn xác cho toàn bộ 81 phím
+      // Sample màu cho 81 phím
       const newColors: Record<string, string> = {}
       let avgR = 0
       let avgG = 0
@@ -396,35 +406,24 @@ export default function App() {
 
       setKeyColors(newColors)
 
-      // Nếu bàn phím thật đang cắm dây & kết nối, gửi chuỗi Handshake 4 bước xuống MCU
-      if (activeDevice && activeDevice.opened && keyCount > 0) {
+      // Gửi đồng bộ sang phím thật qua Native Bridge
+      if (keyCount > 0) {
         const meanR = Math.round(avgR / keyCount)
         const meanG = Math.round(avgG / keyCount)
         const meanB = Math.round(avgB / keyCount)
 
-        const cmd = new Array(64).fill(0)
-        cmd[0] = 0x55
-        cmd[1] = 0x06
-        cmd[2] = 0x00
-        cmd[4] = 0x20
-        cmd[10] = 0x06 // Mode Static đổi màu theo nhịp
-        cmd[11] = Math.round((brightness / 100) * 255)
-        cmd[12] = 0x01
-        cmd[14] = 0x00
-        cmd[16] = meanR
-        cmd[17] = meanG
-        cmd[18] = meanB
-
-        let sum = 0
-        for (let i = 4; i < 64; i++) sum += cmd[i]
-        cmd[3] = sum & 0xff
-
-        // Chuỗi 4 bước chuẩn firmware YJS
-        sendHidPacket(activeDevice, [0x55, 0x01])
-          .then(() => sendHidPacket(activeDevice, [0x55, 0x05, 0x00, 0x20, 0x20]))
-          .then(() => sendHidPacket(activeDevice, cmd))
-          .then(() => sendHidPacket(activeDevice, [0x55, 0x02]))
-          .catch(() => {})
+        fetch('/api/led/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 0x06,
+            r: meanR,
+            g: meanG,
+            b: meanB,
+            brightness: Math.round((brightness / 100) * 255),
+            speed: 1,
+          }),
+        }).catch(() => {})
       }
     }, interval)
   }
@@ -437,57 +436,89 @@ export default function App() {
     setLogMessage('[⏹] Đã dừng phát GIF.')
   }
 
-  // Chế độ nạp màu Firmware tĩnh
+  // Nạp cấu hình màu sang vi điều khiển (Ưu tiên Native Bridge -> Fallback WebHID)
   const sendFirmwareLighting = async () => {
-    if (!activeDevice || !activeDevice.opened) {
-      setLogMessage('[!] Chưa kết nối bàn phím. Hãy bấm "KẾT NỐI ATAS K81"!')
-      return
-    }
+    const numColor = parseInt(selectedColor.replace('#', ''), 16)
+    const r = (numColor >> 16) & 255
+    const g = (numColor >> 8) & 255
+    const b = numColor & 255
+    const rawBrightness = Math.round((brightness / 100) * 255)
+    let effectiveSpeed = Math.max(1, Math.min(speed, 4))
 
+    const fixedSpeedModes = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09]
+    if (fixedSpeedModes.includes(selectedMode)) effectiveSpeed = 1
+
+    setLogMessage('[*] Đang gửi lệnh nạp màu tới bàn phím ATAS K81...')
+
+    // CÁCH 1: Thử gửi qua Native Bridge
     try {
-      setLogMessage('[*] Đang gửi Handshake & cấu hình chế độ chuẩn...')
-      await sendHidPacket(activeDevice, [0x55, 0x01])
-      await delay(15)
-      await sendHidPacket(activeDevice, [0x55, 0x05, 0x00, 0x20, 0x20])
-      await delay(15)
+      const resp = await fetch('/api/led/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: selectedMode,
+          r,
+          g,
+          b,
+          brightness: rawBrightness,
+          speed: effectiveSpeed,
+        }),
+      })
 
-      const numColor = parseInt(selectedColor.replace('#', ''), 16)
-      const r = (numColor >> 16) & 255
-      const g = (numColor >> 8) & 255
-      const b = numColor & 255
-      const rawBrightness = Math.round((brightness / 100) * 255)
-      let effectiveSpeed = Math.max(1, Math.min(speed, 4))
-
-      const fixedSpeedModes = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09]
-      if (fixedSpeedModes.includes(selectedMode)) effectiveSpeed = 1
-
-      const cmd = new Array(64).fill(0)
-      cmd[0] = 0x55
-      cmd[1] = 0x06
-      cmd[2] = 0x00
-      cmd[4] = 0x20
-      cmd[10] = selectedMode
-      cmd[11] = rawBrightness
-      cmd[12] = effectiveSpeed
-      cmd[13] = 0x00
-      cmd[14] = selectedMode === 0x06 ? 0x00 : 0x01
-      cmd[16] = r
-      cmd[17] = g
-      cmd[18] = b
-
-      let sum = 0
-      for (let i = 4; i < 64; i++) sum += cmd[i]
-      cmd[3] = sum & 0xff
-
-      await sendHidPacket(activeDevice, cmd)
-      await delay(15)
-      await sendHidPacket(activeDevice, [0x55, 0x02])
-
-      setLogMessage(`[+] THÀNH CÔNG! Đã nạp chế độ 0x0${selectedMode.toString(16).toUpperCase()} vào chip!`)
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err)
-      setLogMessage(`[-] Lỗi gửi lệnh: ${errMsg}`)
+      if (resp.ok) {
+        const resData = await resp.json()
+        if (resData.success) {
+          setDeviceConnected(true)
+          setLogMessage(
+            `[+] THÀNH CÔNG! Đã nạp Mode 0x0${selectedMode.toString(16).toUpperCase()}, Màu ${selectedColor.toUpperCase()} xuống cổng ${resData.path}!`
+          )
+          return
+        }
+      }
+    } catch {
+      // Fallback xuống WebHID nếu Native Bridge không phản hồi
     }
+
+    // CÁCH 2: Fallback qua WebHID
+    if (activeDevice && activeDevice.opened) {
+      try {
+        await sendHidPacket(activeDevice, [0x55, 0x01])
+        await delay(15)
+        await sendHidPacket(activeDevice, [0x55, 0x05, 0x00, 0x20, 0x20])
+        await delay(15)
+
+        const cmd = new Array(64).fill(0)
+        cmd[0] = 0x55
+        cmd[1] = 0x06
+        cmd[2] = 0x00
+        cmd[4] = 0x20
+        cmd[10] = selectedMode
+        cmd[11] = rawBrightness
+        cmd[12] = effectiveSpeed
+        cmd[13] = 0x00
+        cmd[14] = selectedMode === 0x06 ? 0x00 : 0x01
+        cmd[16] = r
+        cmd[17] = g
+        cmd[18] = b
+
+        let sum = 0
+        for (let i = 4; i < 64; i++) sum += cmd[i]
+        cmd[3] = sum & 0xff
+
+        await sendHidPacket(activeDevice, cmd)
+        await delay(15)
+        await sendHidPacket(activeDevice, [0x55, 0x02])
+
+        setLogMessage(`[+] THÀNH CÔNG (WebHID)! Đã nạp cấu hình vào vi điều khiển!`)
+        return
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        setLogMessage(`[-] Lỗi WebHID: ${errMsg}`)
+        return
+      }
+    }
+
+    setLogMessage('[!] Chưa kết nối bàn phím. Hãy cắm dây Type-C hoặc bấm "KẾT NỐI ATAS K81"!')
   }
 
   return (
@@ -501,17 +532,17 @@ export default function App() {
           <div className="tab-switcher">
             <button
               type="button"
-              className={`tab-btn ${activeTab === 'gif' ? 'active' : ''}`}
-              onClick={() => setActiveTab('gif')}
-            >
-              🎬 PHÁT ẢNH GIF
-            </button>
-            <button
-              type="button"
               className={`tab-btn ${activeTab === 'firmware' ? 'active' : ''}`}
               onClick={() => setActiveTab('firmware')}
             >
               ⚙ CHẾ ĐỘ FIRMWARE
+            </button>
+            <button
+              type="button"
+              className={`tab-btn ${activeTab === 'gif' ? 'active' : ''}`}
+              onClick={() => setActiveTab('gif')}
+            >
+              🎬 PHÁT ẢNH GIF
             </button>
           </div>
           <button
@@ -525,7 +556,7 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {/* Bàn phím ảo 75% Layout - TOÀN BỘ PHÍM SÁNG RỰC RỠ THEO GIF */}
+        {/* Bàn phím ảo 75% Layout */}
         <section className="keyboard-stage">
           <div className="keyboard-chassis">
             {KEYBOARD_ROWS.map((row) => (
@@ -538,7 +569,7 @@ export default function App() {
                     <button
                       key={k.id}
                       type="button"
-                      className={`keycap ${isKnob ? 'knob' : ''} ${isGifPlaying ? 'illuminated' : ''}`}
+                      className={`keycap ${isKnob ? 'knob' : ''}`}
                       style={{
                         flex: k.width || 1,
                         backgroundColor: color,
@@ -558,18 +589,79 @@ export default function App() {
 
         {/* Bảng điều khiển */}
         <aside className="control-panel">
-          {activeTab === 'gif' ? (
+          {activeTab === 'firmware' ? (
+            <>
+              <div className="panel-group">
+                <h3>1. Chế độ Ánh Sáng (Firmware)</h3>
+                <div className="mode-selector">
+                  {LED_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      className={`mode-btn ${selectedMode === mode.id ? 'active' : ''}`}
+                      onClick={() => setSelectedMode(mode.id)}
+                    >
+                      {mode.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="panel-group">
+                <h3>2. Bảng Màu (Color Palette)</h3>
+                <div className="color-tools">
+                  <input
+                    type="color"
+                    value={selectedColor}
+                    onChange={(e) => setSelectedColor(e.target.value)}
+                    className="color-picker-input"
+                  />
+                  <span className="color-hex">{selectedColor.toUpperCase()}</span>
+                </div>
+              </div>
+
+              <div className="panel-group">
+                <h3>3. Độ Sáng ({brightness}%)</h3>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={brightness}
+                  onChange={(e) => setBrightness(Number(e.target.value))}
+                  className="slider"
+                />
+              </div>
+
+              <div className="panel-group">
+                <h3>4. Tốc Độ ({speed})</h3>
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  value={speed}
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  className="slider"
+                />
+              </div>
+
+              <button
+                type="button"
+                className="btn-apply"
+                onClick={sendFirmwareLighting}
+              >
+                🚀 NẠP CẤU HÌNH VÀO PHÍM (APPLY)
+              </button>
+            </>
+          ) : (
             <>
               <div className="panel-group">
                 <h3>1. Chọn Hiệu Ứng GIF</h3>
                 
-                {/* Màn hình Canvas xem trước frame GIF */}
                 <div className="preview-canvas-box">
                   <canvas ref={previewCanvasRef} className="preview-canvas" width={32} height={16} />
                   <span className="preview-label">Bản xem trước Frame</span>
                 </div>
 
-                {/* 4 Nút Preset nhanh */}
                 <div className="preset-grid">
                   <button type="button" className="preset-pill" onClick={() => loadPreset('flame')}>
                     🔥 Lửa Cyber
@@ -635,69 +727,6 @@ export default function App() {
                   </button>
                 )}
               </div>
-            </>
-          ) : (
-            <>
-              <div className="panel-group">
-                <h3>1. Chế độ Ánh Sáng (Firmware)</h3>
-                <div className="mode-selector">
-                  {LED_MODES.map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={`mode-btn ${selectedMode === mode.id ? 'active' : ''}`}
-                      onClick={() => setSelectedMode(mode.id)}
-                    >
-                      {mode.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="panel-group">
-                <h3>2. Bảng Màu (Color Palette)</h3>
-                <div className="color-tools">
-                  <input
-                    type="color"
-                    value={selectedColor}
-                    onChange={(e) => setSelectedColor(e.target.value)}
-                    className="color-picker-input"
-                  />
-                  <span className="color-hex">{selectedColor.toUpperCase()}</span>
-                </div>
-              </div>
-
-              <div className="panel-group">
-                <h3>3. Độ Sáng ({brightness}%)</h3>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={brightness}
-                  onChange={(e) => setBrightness(Number(e.target.value))}
-                  className="slider"
-                />
-              </div>
-
-              <div className="panel-group">
-                <h3>4. Tốc Độ ({speed})</h3>
-                <input
-                  type="range"
-                  min="1"
-                  max="4"
-                  value={speed}
-                  onChange={(e) => setSpeed(Number(e.target.value))}
-                  className="slider"
-                />
-              </div>
-
-              <button
-                type="button"
-                className="btn-apply"
-                onClick={sendFirmwareLighting}
-              >
-                🚀 NẠP CẤU HÌNH VÀO PHÍM
-              </button>
             </>
           )}
         </aside>
