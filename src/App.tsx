@@ -144,9 +144,9 @@ function delay(ms: number): Promise<void> {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('firmware')
+  const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('gif')
   const [selectedColor, setSelectedColor] = useState<string>('#9820cf')
-  const [selectedMode, setSelectedMode] = useState<number>(0x06) // Default Static Red/Purple
+  const [selectedMode, setSelectedMode] = useState<number>(0x06) // Default Static
   const [brightness, setBrightness] = useState<number>(100)
   const [speed, setSpeed] = useState<number>(1)
   const [keyColors, setKeyColors] = useState<Record<string, string>>({})
@@ -156,17 +156,17 @@ export default function App() {
 
   // GIF Engine State
   const [isGifPlaying, setIsGifPlaying] = useState<boolean>(false)
-  const [gifFileName, setGifFileName] = useState<string>('🔥 Preset: Ngọn Lửa Cyberpunk')
-  const [gifFps, setGifFps] = useState<number>(12)
+  const [gifFileName, setGifFileName] = useState<string>('💜 Trái Tim Neon (purple_heart.gif)')
+  const [gifFps, setGifFps] = useState<number>(15)
   const framesRef = useRef<ParsedFrame[]>([])
   const frameIndexRef = useRef<number>(0)
   const animationTimerRef = useRef<number | null>(null)
   const isPlayingRef = useRef<boolean>(false)
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Tự động kiểm tra Native Bridge (kết nối trực tiếp qua Linux /dev/hidraw5)
+  // Tự động kiểm tra Native Bridge & Nạp file purple_heart.gif làm mặc định
   useEffect(() => {
-    loadPreset('flame')
+    loadHeartPreset()
 
     fetch('/api/led/status')
       .then((r) => r.json())
@@ -186,6 +186,25 @@ export default function App() {
       clearInterval(animationTimerRef.current ?? undefined)
     }
   }, [])
+
+  // Nạp trực tiếp file purple_heart.gif được tạo từ code Python
+  const loadHeartPreset = async () => {
+    stopGifStream()
+    setGifFileName('💜 Trái Tim Neon (purple_heart.gif)')
+    setLogMessage('[*] Đang nạp file purple_heart.gif...')
+    try {
+      const res = await fetch('/purple_heart.gif')
+      const buffer = await res.arrayBuffer()
+      const parsedGif = parseGIF(buffer)
+      const decompressed = decompressFrames(parsedGif, true)
+      framesRef.current = decompressed
+      frameIndexRef.current = 0
+      setLogMessage(`[+] Đã nạp thành công 30 frames Trái Tim Neon! Bấm "PHÁT GIF" ngay!`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      setLogMessage(`[-] Lỗi nạp GIF: ${errMsg}`)
+    }
+  }
 
   // Kết nối WebHID thủ công nếu không chạy qua Native Bridge
   const connectWebHID = async () => {
@@ -246,7 +265,7 @@ export default function App() {
     }
   }
 
-  // Tải preset mẫu
+  // Tải preset thuật toán mẫu
   const loadPreset = (type: 'flame' | 'rainbow' | 'matrix' | 'neon') => {
     stopGifStream()
     const width = 32
@@ -356,7 +375,7 @@ export default function App() {
   // Bắt đầu phát luồng GIF
   const startGifStream = () => {
     if (framesRef.current.length === 0) {
-      loadPreset('flame')
+      loadHeartPreset()
     }
 
     if (isPlayingRef.current) return
@@ -532,17 +551,17 @@ export default function App() {
           <div className="tab-switcher">
             <button
               type="button"
-              className={`tab-btn ${activeTab === 'firmware' ? 'active' : ''}`}
-              onClick={() => setActiveTab('firmware')}
-            >
-              ⚙ CHẾ ĐỘ FIRMWARE
-            </button>
-            <button
-              type="button"
               className={`tab-btn ${activeTab === 'gif' ? 'active' : ''}`}
               onClick={() => setActiveTab('gif')}
             >
               🎬 PHÁT ẢNH GIF
+            </button>
+            <button
+              type="button"
+              className={`tab-btn ${activeTab === 'firmware' ? 'active' : ''}`}
+              onClick={() => setActiveTab('firmware')}
+            >
+              ⚙ CHẾ ĐỘ FIRMWARE
             </button>
           </div>
           <button
@@ -589,7 +608,86 @@ export default function App() {
 
         {/* Bảng điều khiển */}
         <aside className="control-panel">
-          {activeTab === 'firmware' ? (
+          {activeTab === 'gif' ? (
+            <>
+              <div className="panel-group">
+                <h3>1. Chọn Hiệu Ứng GIF</h3>
+                
+                <div className="preview-canvas-box">
+                  <canvas ref={previewCanvasRef} className="preview-canvas" width={32} height={16} />
+                  <span className="preview-label">Bản xem trước Frame</span>
+                </div>
+
+                <div className="preset-grid">
+                  <button type="button" className="preset-pill highlight-heart" onClick={loadHeartPreset}>
+                    💜 Trái Tim Tím (purple_heart.gif)
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('flame')}>
+                    🔥 Lửa Cyber
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('rainbow')}>
+                    🌈 Cầu Vồng
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('matrix')}>
+                    ⚡ Matrix Xanh
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('neon')}>
+                    💖 Neon Pulse
+                  </button>
+                </div>
+
+                <label className="file-dropzone">
+                  <input
+                    type="file"
+                    accept=".gif,image/gif"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleGifUpload(e.target.files[0])
+                      }
+                    }}
+                  />
+                  <span>📁 Tải lên file .GIF khác từ máy</span>
+                </label>
+                <div className="gif-status">Đang chọn: <strong>{gifFileName}</strong></div>
+              </div>
+
+              <div className="panel-group">
+                <h3>2. Tốc Độ ({gifFps} FPS)</h3>
+                <input
+                  type="range"
+                  min="5"
+                  max="25"
+                  value={gifFps}
+                  onChange={(e) => setGifFps(Number(e.target.value))}
+                  className="slider"
+                />
+              </div>
+
+              <div className="panel-group">
+                <h3>3. Độ Sáng ({brightness}%)</h3>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={brightness}
+                  onChange={(e) => setBrightness(Number(e.target.value))}
+                  className="slider"
+                />
+              </div>
+
+              <div className="gif-action-row">
+                {!isGifPlaying ? (
+                  <button type="button" className="btn-apply pulse" onClick={startGifStream}>
+                    ▶ PHÁT GIF LÊN BÀN PHÍM
+                  </button>
+                ) : (
+                  <button type="button" className="btn-stop" onClick={stopGifStream}>
+                    ⏹ DỪNG PHÁT GIF
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
             <>
               <div className="panel-group">
                 <h3>1. Chế độ Ánh Sáng (Firmware)</h3>
@@ -651,82 +749,6 @@ export default function App() {
               >
                 🚀 NẠP CẤU HÌNH VÀO PHÍM (APPLY)
               </button>
-            </>
-          ) : (
-            <>
-              <div className="panel-group">
-                <h3>1. Chọn Hiệu Ứng GIF</h3>
-                
-                <div className="preview-canvas-box">
-                  <canvas ref={previewCanvasRef} className="preview-canvas" width={32} height={16} />
-                  <span className="preview-label">Bản xem trước Frame</span>
-                </div>
-
-                <div className="preset-grid">
-                  <button type="button" className="preset-pill" onClick={() => loadPreset('flame')}>
-                    🔥 Lửa Cyber
-                  </button>
-                  <button type="button" className="preset-pill" onClick={() => loadPreset('rainbow')}>
-                    🌈 Cầu Vồng
-                  </button>
-                  <button type="button" className="preset-pill" onClick={() => loadPreset('matrix')}>
-                    ⚡ Matrix Xanh
-                  </button>
-                  <button type="button" className="preset-pill" onClick={() => loadPreset('neon')}>
-                    💖 Neon Pulse
-                  </button>
-                </div>
-
-                <label className="file-dropzone">
-                  <input
-                    type="file"
-                    accept=".gif,image/gif"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleGifUpload(e.target.files[0])
-                      }
-                    }}
-                  />
-                  <span>📁 Tải lên file .GIF từ máy</span>
-                </label>
-                <div className="gif-status">Đang chọn: <strong>{gifFileName}</strong></div>
-              </div>
-
-              <div className="panel-group">
-                <h3>2. Tốc Độ ({gifFps} FPS)</h3>
-                <input
-                  type="range"
-                  min="5"
-                  max="25"
-                  value={gifFps}
-                  onChange={(e) => setGifFps(Number(e.target.value))}
-                  className="slider"
-                />
-              </div>
-
-              <div className="panel-group">
-                <h3>3. Độ Sáng ({brightness}%)</h3>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={brightness}
-                  onChange={(e) => setBrightness(Number(e.target.value))}
-                  className="slider"
-                />
-              </div>
-
-              <div className="gif-action-row">
-                {!isGifPlaying ? (
-                  <button type="button" className="btn-apply pulse" onClick={startGifStream}>
-                    ▶ PHÁT GIF LÊN BÀN PHÍM
-                  </button>
-                ) : (
-                  <button type="button" className="btn-stop" onClick={stopGifStream}>
-                    ⏹ DỪNG PHÁT GIF
-                  </button>
-                )}
-              </div>
             </>
           )}
         </aside>

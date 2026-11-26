@@ -237,6 +237,18 @@ body {
   color: var(--accent-color);
 }
 
+.preset-pill.highlight-heart {
+  grid-column: span 2;
+  background: linear-gradient(135deg, #7c3aed, #db2777);
+  color: #fff;
+  border: 1px solid #c084fc;
+}
+
+.preset-pill.highlight-heart:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 15px rgba(219, 39, 119, 0.5);
+}
+
 .file-dropzone {
   border: 2px dashed #2e416b;
   border-radius: 10px;
