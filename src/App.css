@@ -237,6 +237,18 @@ body {
   color: var(--accent-color);
 }
 
+.preset-pill.highlight-ecg {
+  grid-column: span 2;
+  background: linear-gradient(135deg, #059669, #0284c7);
+  color: #fff;
+  border: 1px solid #34d399;
+}
+
+.preset-pill.highlight-ecg:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.5);
+}
+
 .preset-pill.highlight-heart {
   grid-column: span 2;
   background: linear-gradient(135deg, #7c3aed, #db2777);

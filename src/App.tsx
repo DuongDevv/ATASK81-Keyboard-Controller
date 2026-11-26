@@ -145,7 +145,7 @@ function delay(ms: number): Promise<void> {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('gif')
-  const [selectedColor, setSelectedColor] = useState<string>('#9820cf')
+  const [selectedColor, setSelectedColor] = useState<string>('#00ffcc')
   const [selectedMode, setSelectedMode] = useState<number>(0x06) // Default Static
   const [brightness, setBrightness] = useState<number>(100)
   const [speed, setSpeed] = useState<number>(1)
@@ -156,17 +156,17 @@ export default function App() {
 
   // GIF Engine State
   const [isGifPlaying, setIsGifPlaying] = useState<boolean>(false)
-  const [gifFileName, setGifFileName] = useState<string>('💜 Trái Tim Neon (purple_heart.gif)')
-  const [gifFps, setGifFps] = useState<number>(15)
+  const [gifFileName, setGifFileName] = useState<string>('💓 Điện Tâm Đồ (aula_s75_ecg.gif)')
+  const [gifFps, setGifFps] = useState<number>(18)
   const framesRef = useRef<ParsedFrame[]>([])
   const frameIndexRef = useRef<number>(0)
   const animationTimerRef = useRef<number | null>(null)
   const isPlayingRef = useRef<boolean>(false)
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  // Tự động kiểm tra Native Bridge & Nạp file purple_heart.gif làm mặc định
+  // Khởi tạo nạp sẵn ECG Heartbeat khi vừa mở
   useEffect(() => {
-    loadHeartPreset()
+    loadEcgPreset()
 
     fetch('/api/led/status')
       .then((r) => r.json())
@@ -187,7 +187,29 @@ export default function App() {
     }
   }, [])
 
-  // Nạp trực tiếp file purple_heart.gif được tạo từ code Python
+  // Nạp ảnh GIF Điện Tâm Đồ ECG từ AULA S75 Pro
+  const loadEcgPreset = async () => {
+    stopGifStream()
+    setGifFileName('💓 Điện Tâm Đồ AULA S75 Pro (289 frames, 900x341)')
+    setLogMessage('[*] Đang giải mã 289 frames Điện Tâm Đồ AULA S75 Pro...')
+    try {
+      const res = await fetch('/aula_s75_ecg.gif')
+      const buffer = await res.arrayBuffer()
+      const parsedGif = parseGIF(buffer)
+      const decompressed = decompressFrames(parsedGif, true)
+      framesRef.current = decompressed
+      frameIndexRef.current = 0
+      setGifFps(18)
+      setLogMessage(
+        `[+] ĐÃ NẠP XONG 289 FRAMES ĐIỆN TÂM ĐỒ ECG! Tỉ lệ 900x341 khớp 100% layout 75%! Bấm "PHÁT GIF" ngay!`
+      )
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      setLogMessage(`[-] Lỗi nạp GIF: ${errMsg}`)
+    }
+  }
+
+  // Nạp file purple_heart.gif được tạo từ code Python
   const loadHeartPreset = async () => {
     stopGifStream()
     setGifFileName('💜 Trái Tim Neon (purple_heart.gif)')
@@ -199,6 +221,7 @@ export default function App() {
       const decompressed = decompressFrames(parsedGif, true)
       framesRef.current = decompressed
       frameIndexRef.current = 0
+      setGifFps(15)
       setLogMessage(`[+] Đã nạp thành công 30 frames Trái Tim Neon! Bấm "PHÁT GIF" ngay!`)
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -375,7 +398,7 @@ export default function App() {
   // Bắt đầu phát luồng GIF
   const startGifStream = () => {
     if (framesRef.current.length === 0) {
-      loadHeartPreset()
+      loadEcgPreset()
     }
 
     if (isPlayingRef.current) return
@@ -619,6 +642,9 @@ export default function App() {
                 </div>
 
                 <div className="preset-grid">
+                  <button type="button" className="preset-pill highlight-ecg" onClick={loadEcgPreset}>
+                    💓 Điện Tâm Đồ ECG (AULA S75 Pro)
+                  </button>
                   <button type="button" className="preset-pill highlight-heart" onClick={loadHeartPreset}>
                     💜 Trái Tim Tím (purple_heart.gif)
                   </button>
