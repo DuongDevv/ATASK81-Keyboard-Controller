@@ -9,7 +9,7 @@ interface KeyDef {
   width?: number
 }
 
-// Layout ANSI 75% chuẩn cho ATAS K81
+// Layout ANSI 75% chuẩn cho ATAS K81 (81 phím + Knob)
 const KEYBOARD_ROWS: KeyDef[][] = [
   [
     { id: 'k_esc', label: 'ESC' },
@@ -106,7 +106,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ]
 
-// Tính toán tọa độ chuẩn hóa (x: 0..1, y: 0..1) của từng phím
+// Tọa độ chuẩn hóa (x: 0..1, y: 0..1) của từng switch
 const KEY_COORDINATES: Record<string, { x: number; y: number }> = {}
 const TOTAL_ROWS = KEYBOARD_ROWS.length
 KEYBOARD_ROWS.forEach((row, rowIndex) => {
@@ -144,7 +144,7 @@ function delay(ms: number): Promise<void> {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'firmware' | 'gif'>('gif')
+  const [activeTab, setActiveTab] = useState<'gif' | 'firmware'>('gif')
   const [selectedColor, setSelectedColor] = useState<string>('#9820cf')
   const [selectedMode, setSelectedMode] = useState<number>(0x00)
   const [brightness, setBrightness] = useState<number>(85)
@@ -154,27 +154,28 @@ export default function App() {
   const [logMessage, setLogMessage] = useState<string>('Sẵn sàng kết nối ATAS K81...')
   const [activeDevice, setActiveDevice] = useState<HIDDevice | null>(null)
 
-  // GIF Streaming State
+  // GIF Engine State
   const [isGifPlaying, setIsGifPlaying] = useState<boolean>(false)
-  const [gifFileName, setGifFileName] = useState<string>('Chưa chọn file GIF')
-  const [gifFps, setGifFps] = useState<number>(15)
+  const [gifFileName, setGifFileName] = useState<string>('Chưa chọn (dùng Preset có sẵn)')
+  const [gifFps, setGifFps] = useState<number>(12)
   const framesRef = useRef<ParsedFrame[]>([])
   const frameIndexRef = useRef<number>(0)
   const animationTimerRef = useRef<number | null>(null)
   const isPlayingRef = useRef<boolean>(false)
-  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
+  // Khởi tạo preset mặc định khi vừa mở app
   useEffect(() => {
-    offscreenCanvasRef.current = document.createElement('canvas')
+    loadPreset('flame')
     return () => {
       clearInterval(animationTimerRef.current ?? undefined)
     }
   }, [])
 
-  // Kết nối WebHID với tự động tìm Interface Vendor-Defined (0xFF00)
+  // Kết nối WebHID với thiết bị ATAS K81
   const connectWebHID = async () => {
     if (!('hid' in navigator)) {
-      setLogMessage('Trình duyệt không hỗ trợ WebHID. Dùng Chrome/Edge/Brave.')
+      setLogMessage('Trình duyệt không hỗ trợ WebHID. Hãy dùng Chrome/Edge/Brave.')
       return
     }
 
@@ -185,7 +186,7 @@ export default function App() {
       })
 
       if (!requested || requested.length === 0) {
-        setLogMessage('[-] Người dùng đã hủy chọn thiết bị.')
+        setLogMessage('[-] Bạn đã hủy chọn thiết bị.')
         return
       }
 
@@ -230,10 +231,98 @@ export default function App() {
     }
   }
 
-  // Đọc file GIF và parse thành mảng Frame
+  // Tải các hiệu ứng mẫu cực đẹp
+  const loadPreset = (type: 'flame' | 'rainbow' | 'matrix' | 'neon') => {
+    stopGifStream()
+    const width = 32
+    const height = 16
+    const sampleFrames: ParsedFrame[] = []
+
+    if (type === 'flame') {
+      setGifFileName('🔥 Preset: Ngọn Lửa Cyberpunk')
+      for (let f = 0; f < 24; f++) {
+        const patch = new Uint8ClampedArray(width * height * 4)
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4
+            const heat = Math.sin(x * 0.35 + f * 0.4) * 0.5 + Math.cos(y * 0.5 - f * 0.3) * 0.5
+            const intensity = Math.max(0, Math.min(1, heat + (1 - y / height) * 0.9))
+
+            patch[idx] = Math.round(intensity * 255) // R
+            patch[idx + 1] = Math.round(Math.pow(intensity, 2) * 140) // G
+            patch[idx + 2] = Math.round(Math.max(0, 1 - intensity) * 60) // B
+            patch[idx + 3] = 255
+          }
+        }
+        sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
+      }
+    } else if (type === 'rainbow') {
+      setGifFileName('🌈 Preset: Sóng Cầu Vồng Dynamic')
+      for (let f = 0; f < 30; f++) {
+        const patch = new Uint8ClampedArray(width * height * 4)
+        const offset = f / 30
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4
+            const hue = (x / width + offset) % 1
+            const r = Math.round((Math.sin(hue * 6.28) * 0.5 + 0.5) * 255)
+            const g = Math.round((Math.sin(hue * 6.28 + 2.09) * 0.5 + 0.5) * 255)
+            const b = Math.round((Math.sin(hue * 6.28 + 4.18) * 0.5 + 0.5) * 255)
+
+            patch[idx] = r
+            patch[idx + 1] = g
+            patch[idx + 2] = b
+            patch[idx + 3] = 255
+          }
+        }
+        sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
+      }
+    } else if (type === 'matrix') {
+      setGifFileName('⚡ Preset: Mưa Ký Tự Matrix Xanh')
+      for (let f = 0; f < 20; f++) {
+        const patch = new Uint8ClampedArray(width * height * 4)
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4
+            const drop = ((y - f * 1.5 + x * 3) % height + height) % height
+            const intensity = Math.max(0, 1 - drop / 5)
+
+            patch[idx] = Math.round(intensity * 40)
+            patch[idx + 1] = Math.round(intensity * 255)
+            patch[idx + 2] = Math.round(intensity * 80)
+            patch[idx + 3] = 255
+          }
+        }
+        sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
+      }
+    } else {
+      setGifFileName('💖 Preset: Nhịp Tim Neon Pulse')
+      for (let f = 0; f < 20; f++) {
+        const patch = new Uint8ClampedArray(width * height * 4)
+        const pulse = (Math.sin(f * 0.314) * 0.5 + 0.5)
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4
+            patch[idx] = Math.round(pulse * 255)
+            patch[idx + 1] = Math.round(pulse * 30)
+            patch[idx + 2] = Math.round(pulse * 200)
+            patch[idx + 3] = 255
+          }
+        }
+        sampleFrames.push({ dims: { left: 0, top: 0, width, height }, colorTable: [], delay: 50, disposalType: 1, patch })
+      }
+    }
+
+    framesRef.current = sampleFrames
+    frameIndexRef.current = 0
+    setLogMessage(`[+] Đã tải ${sampleFrames.length} frames (${gifFileName}). Bấm "PHÁT GIF" để xem!`)
+  }
+
+  // Tải file GIF tùy ý từ máy tính
   const handleGifUpload = async (file: File) => {
+    stopGifStream()
     setGifFileName(file.name)
-    setLogMessage(`[*] Đang giải mã cấu trúc file GIF: ${file.name}...`)
+    setLogMessage(`[*] Đang giải nén file GIF: ${file.name}...`)
 
     try {
       const buffer = await file.arrayBuffer()
@@ -241,65 +330,29 @@ export default function App() {
       const decompressed = decompressFrames(parsedGif, true)
 
       if (decompressed.length === 0) {
-        setLogMessage('[-] File GIF không chứa frames hợp lệ.')
+        setLogMessage('[-] File GIF không chứa frame hợp lệ.')
         return
       }
 
       framesRef.current = decompressed
       frameIndexRef.current = 0
-      setLogMessage(
-        `[+] Đã nạp thành công GIF (${decompressed.length} frames). Bấm "PHÁT GIF LÊN PHÍM" để thưởng thức!`
-      )
+      setLogMessage(`[+] Đã nạp ${decompressed.length} frames từ ${file.name}! Bấm "PHÁT GIF" ngay!`)
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
       setLogMessage(`[-] Lỗi đọc file GIF: ${errMsg}`)
     }
   }
 
-  // Sample Generator: Tạo hiệu ứng ma trận ngọn lửa / pixel giả lập nếu chưa có file GIF
-  const generateSampleFireAnimation = () => {
-    setGifFileName('Preset: Cyberpunk Flame Effect')
-    const sampleFrames: ParsedFrame[] = []
-    const width = 32
-    const height = 16
-
-    for (let f = 0; f < 20; f++) {
-      const patch = new Uint8ClampedArray(width * height * 4)
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4
-          const heat = Math.sin(x * 0.4 + f * 0.5) * 0.5 + Math.cos(y * 0.6 - f * 0.4) * 0.5
-          const intensity = Math.max(0, Math.min(1, heat + (1 - y / height) * 0.8))
-
-          patch[idx] = Math.round(intensity * 255) // R
-          patch[idx + 1] = Math.round(intensity * intensity * 120) // G
-          patch[idx + 2] = Math.round(Math.max(0, 1 - intensity) * 80) // B
-          patch[idx + 3] = 255
-        }
-      }
-      sampleFrames.push({
-        dims: { left: 0, top: 0, width, height },
-        colorTable: [],
-        delay: 50,
-        disposalType: 1,
-        patch,
-      })
-    }
-    framesRef.current = sampleFrames
-    frameIndexRef.current = 0
-    setLogMessage('[+] Đã nạp Preset Hiệu ứng Ngọn lửa Cyberpunk (20 frames)!')
-  }
-
-  // Vòng lặp phát animation (render lên Virtual Keyboard và stream qua HID)
+  // Bắt đầu phát luồng GIF
   const startGifStream = () => {
     if (framesRef.current.length === 0) {
-      generateSampleFireAnimation()
+      loadPreset('flame')
     }
 
     if (isPlayingRef.current) return
     isPlayingRef.current = true
     setIsGifPlaying(true)
-    setLogMessage('[▶] Đang phát GIF lên bàn phím ảo và truyền luồng qua USB...')
+    setLogMessage('[▶] ĐANG PHÁT GIF: Bàn phím ảo đang sáng rực rỡ theo từng frame...')
 
     const interval = Math.round(1000 / gifFps)
     animationTimerRef.current = window.setInterval(async () => {
@@ -309,7 +362,7 @@ export default function App() {
       const frame = frames[frameIndexRef.current % frames.length]
       frameIndexRef.current++
 
-      const canvas = offscreenCanvasRef.current
+      const canvas = previewCanvasRef.current
       if (!canvas) return
       const ctx = canvas.getContext('2d')
       if (!ctx) return
@@ -321,7 +374,7 @@ export default function App() {
       imgData.data.set(frame.patch)
       ctx.putImageData(imgData, 0, 0)
 
-      // Sample màu cho từng phím
+      // Sample màu chuẩn xác cho toàn bộ 81 phím
       const newColors: Record<string, string> = {}
       let avgR = 0
       let avgG = 0
@@ -329,8 +382,8 @@ export default function App() {
       let keyCount = 0
 
       for (const [keyId, coord] of Object.entries(KEY_COORDINATES)) {
-        const px = Math.floor(coord.x * (canvas.width - 1))
-        const py = Math.floor(coord.y * (canvas.height - 1))
+        const px = Math.min(canvas.width - 1, Math.max(0, Math.floor(coord.x * canvas.width)))
+        const py = Math.min(canvas.height - 1, Math.max(0, Math.floor(coord.y * canvas.height)))
         const pixel = ctx.getImageData(px, py, 1, 1).data
 
         const hex = `#${((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1)}`
@@ -343,7 +396,7 @@ export default function App() {
 
       setKeyColors(newColors)
 
-      // Nếu có phím cắm cáp, bắn gói tin đồng bộ màu thống kê xuống MCU
+      // Nếu bàn phím thật đang cắm dây & kết nối, gửi chuỗi Handshake 4 bước xuống MCU
       if (activeDevice && activeDevice.opened && keyCount > 0) {
         const meanR = Math.round(avgR / keyCount)
         const meanG = Math.round(avgG / keyCount)
@@ -354,7 +407,7 @@ export default function App() {
         cmd[1] = 0x06
         cmd[2] = 0x00
         cmd[4] = 0x20
-        cmd[10] = 0x06 // Mode Static
+        cmd[10] = 0x06 // Mode Static đổi màu theo nhịp
         cmd[11] = Math.round((brightness / 100) * 255)
         cmd[12] = 0x01
         cmd[14] = 0x00
@@ -366,7 +419,12 @@ export default function App() {
         for (let i = 4; i < 64; i++) sum += cmd[i]
         cmd[3] = sum & 0xff
 
-        sendHidPacket(activeDevice, cmd).catch(() => {})
+        // Chuỗi 4 bước chuẩn firmware YJS
+        sendHidPacket(activeDevice, [0x55, 0x01])
+          .then(() => sendHidPacket(activeDevice, [0x55, 0x05, 0x00, 0x20, 0x20]))
+          .then(() => sendHidPacket(activeDevice, cmd))
+          .then(() => sendHidPacket(activeDevice, [0x55, 0x02]))
+          .catch(() => {})
       }
     }, interval)
   }
@@ -379,7 +437,7 @@ export default function App() {
     setLogMessage('[⏹] Đã dừng phát GIF.')
   }
 
-  // Nạp cấu hình tĩnh mặc định theo Firmware
+  // Chế độ nạp màu Firmware tĩnh
   const sendFirmwareLighting = async () => {
     if (!activeDevice || !activeDevice.opened) {
       setLogMessage('[!] Chưa kết nối bàn phím. Hãy bấm "KẾT NỐI ATAS K81"!')
@@ -436,8 +494,8 @@ export default function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="brand">
-          <h1>ATAS K81 <span>STUDIO & GIF LED</span></h1>
-          <p className="subtitle">Chỉnh LED RGB & Phát ảnh GIF động theo phong cách Hoàng Phúc Studio</p>
+          <h1>ATAS K81 <span>STUDIO & GIF STREAMER</span></h1>
+          <p className="subtitle">Chỉnh LED RGB & Phát ảnh GIF động chuyên nghiệp theo phong cách Hoàng Phúc Studio</p>
         </div>
         <div className="header-actions">
           <div className="tab-switcher">
@@ -467,7 +525,7 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {/* Bàn phím ảo 75% Layout */}
+        {/* Bàn phím ảo 75% Layout - TOÀN BỘ PHÍM SÁNG RỰC RỠ THEO GIF */}
         <section className="keyboard-stage">
           <div className="keyboard-chassis">
             {KEYBOARD_ROWS.map((row) => (
@@ -480,16 +538,16 @@ export default function App() {
                     <button
                       key={k.id}
                       type="button"
-                      className={`keycap ${isKnob ? 'knob' : ''}`}
+                      className={`keycap ${isKnob ? 'knob' : ''} ${isGifPlaying ? 'illuminated' : ''}`}
                       style={{
                         flex: k.width || 1,
-                        boxShadow: `0 0 14px ${color}99, inset 0 0 8px ${color}66`,
-                        borderColor: `${color}cc`,
+                        backgroundColor: color,
+                        boxShadow: `0 0 16px ${color}aa, inset 0 0 10px rgba(255, 255, 255, 0.3)`,
+                        borderColor: '#ffffff55',
                       }}
                       onClick={() => setKeyColors((prev) => ({ ...prev, [k.id]: selectedColor }))}
                     >
                       <span className="key-label">{k.label}</span>
-                      <span className="led-indicator" style={{ backgroundColor: color }} />
                     </button>
                   )
                 })}
@@ -498,12 +556,35 @@ export default function App() {
           </div>
         </section>
 
-        {/* Thanh công cụ theo từng Tab */}
+        {/* Bảng điều khiển */}
         <aside className="control-panel">
           {activeTab === 'gif' ? (
             <>
               <div className="panel-group">
-                <h3>1. Nạp File GIF Yêu Thích</h3>
+                <h3>1. Chọn Hiệu Ứng GIF</h3>
+                
+                {/* Màn hình Canvas xem trước frame GIF */}
+                <div className="preview-canvas-box">
+                  <canvas ref={previewCanvasRef} className="preview-canvas" width={32} height={16} />
+                  <span className="preview-label">Bản xem trước Frame</span>
+                </div>
+
+                {/* 4 Nút Preset nhanh */}
+                <div className="preset-grid">
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('flame')}>
+                    🔥 Lửa Cyber
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('rainbow')}>
+                    🌈 Cầu Vồng
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('matrix')}>
+                    ⚡ Matrix Xanh
+                  </button>
+                  <button type="button" className="preset-pill" onClick={() => loadPreset('neon')}>
+                    💖 Neon Pulse
+                  </button>
+                </div>
+
                 <label className="file-dropzone">
                   <input
                     type="file"
@@ -514,24 +595,17 @@ export default function App() {
                       }
                     }}
                   />
-                  <span>📁 Bấm để chọn file .GIF từ máy</span>
+                  <span>📁 Tải lên file .GIF từ máy</span>
                 </label>
-                <div className="gif-status">File: <strong>{gifFileName}</strong></div>
-                <button
-                  type="button"
-                  className="preset-btn"
-                  onClick={generateSampleFireAnimation}
-                >
-                  🔥 Nạp Mẫu GIF: Cyberpunk Flame
-                </button>
+                <div className="gif-status">Đang chọn: <strong>{gifFileName}</strong></div>
               </div>
 
               <div className="panel-group">
-                <h3>2. Tốc Độ Khung Hình ({gifFps} FPS)</h3>
+                <h3>2. Tốc Độ ({gifFps} FPS)</h3>
                 <input
                   type="range"
                   min="5"
-                  max="30"
+                  max="25"
                   value={gifFps}
                   onChange={(e) => setGifFps(Number(e.target.value))}
                   className="slider"
@@ -539,7 +613,7 @@ export default function App() {
               </div>
 
               <div className="panel-group">
-                <h3>3. Độ Sáng LED ({brightness}%)</h3>
+                <h3>3. Độ Sáng ({brightness}%)</h3>
                 <input
                   type="range"
                   min="0"
@@ -552,7 +626,7 @@ export default function App() {
 
               <div className="gif-action-row">
                 {!isGifPlaying ? (
-                  <button type="button" className="btn-apply" onClick={startGifStream}>
+                  <button type="button" className="btn-apply pulse" onClick={startGifStream}>
                     ▶ PHÁT GIF LÊN BÀN PHÍM
                   </button>
                 ) : (

@@ -1,7 +1,7 @@
 :root {
   --bg-color: #0b0f19;
   --panel-bg: #131b2e;
-  --chassis-bg: #1a2238;
+  --chassis-bg: #161e33;
   --accent-color: #00ffcc;
   --text-main: #f0f4fc;
   --text-muted: #8a99ad;
@@ -119,35 +119,35 @@ body {
 .keyboard-chassis {
   background-color: var(--chassis-bg);
   padding: 1.2rem;
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 2px 4px rgba(255, 255, 255, 0.05);
   border: 2px solid #2a3754;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.45rem;
   width: 100%;
-  max-width: 950px;
+  max-width: 960px;
 }
 
 .keyboard-row {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .keycap {
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid #1e293b;
-  border-radius: 6px;
-  height: 48px;
+  color: #fff;
+  border: 1px solid #ffffff44;
+  border-radius: 8px;
+  height: 50px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   position: relative;
-  transition: transform 0.08s ease, box-shadow 0.1s ease;
+  transition: transform 0.08s ease, background-color 0.05s ease, box-shadow 0.05s ease;
   user-select: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 .keycap:hover {
@@ -161,21 +161,13 @@ body {
 
 .keycap.knob {
   border-radius: 50%;
-  background: radial-gradient(circle, #334155 30%, #0f172a 90%);
 }
 
 .key-label {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 800;
   pointer-events: none;
-}
-
-.led-indicator {
-  width: 8px;
-  height: 3px;
-  border-radius: 2px;
-  margin-top: 4px;
-  pointer-events: none;
+  letter-spacing: 0.5px;
 }
 
 .control-panel {
@@ -185,7 +177,7 @@ body {
   border: 1px solid #23304d;
   display: flex;
   flex-direction: column;
-  gap: 1.3rem;
+  gap: 1.2rem;
 }
 
 .panel-group h3 {
@@ -196,10 +188,59 @@ body {
   letter-spacing: 0.5px;
 }
 
+.preview-canvas-box {
+  background: #090d16;
+  border: 1px solid #23304d;
+  border-radius: 10px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.preview-canvas {
+  width: 100%;
+  height: 60px;
+  border-radius: 6px;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+.preview-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.preset-pill {
+  background: #1a2238;
+  border: 1px solid #283756;
+  color: #e2e8f0;
+  padding: 0.5rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-pill:hover {
+  background: #243252;
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
 .file-dropzone {
   border: 2px dashed #2e416b;
   border-radius: 10px;
-  padding: 1.2rem;
+  padding: 0.8rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -209,7 +250,7 @@ body {
   transition: all 0.2s;
   color: var(--accent-color);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .file-dropzone:hover {
@@ -222,33 +263,14 @@ body {
 }
 
 .gif-status {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   word-break: break-all;
 }
 
 .gif-status strong {
   color: #fff;
-}
-
-.preset-btn {
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #f59e0b;
-  width: 100%;
-  padding: 0.6rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  margin-top: 0.6rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.preset-btn:hover {
-  background: #283756;
-  border-color: #f59e0b;
 }
 
 .mode-selector {
