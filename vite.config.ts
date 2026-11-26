@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
 function atasKeyboardPlugin(): Plugin {
+  // Locate accessible character device node matching YJS HID descriptor
   const findHidPath = (): string | null => {
     for (const p of ['/dev/hidraw5', '/dev/hidraw4', '/dev/hidraw3']) {
       if (fs.existsSync(p)) {
@@ -16,6 +17,7 @@ function atasKeyboardPlugin(): Plugin {
     return null
   }
 
+  // Prepend Report ID 0x00 and write fixed 65-byte frame to raw HID endpoint
   const sendPacket = (fd: number, payload: number[]) => {
     const buf = Buffer.alloc(65, 0)
     for (let i = 0; i < payload.length && i < 64; i++) {
@@ -24,6 +26,7 @@ function atasKeyboardPlugin(): Plugin {
     fs.writeSync(fd, buf)
   }
 
+  // Spin-wait to satisfy MCU internal buffer processing latency between frames
   const sleepSync = (ms: number) => {
     const end = Date.now() + ms
     while (Date.now() < end) {}
@@ -33,6 +36,7 @@ function atasKeyboardPlugin(): Plugin {
     name: 'atas-keyboard-native-bridge',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
+        // Health-check endpoint for detecting physical device readiness
         if (req.url === '/api/led/status' && req.method === 'GET') {
           const path = findHidPath()
           res.setHeader('Content-Type', 'application/json')
@@ -40,6 +44,7 @@ function atasKeyboardPlugin(): Plugin {
           return
         }
 
+        // Bridge endpoint: executes the 4-step frame protocol down to character device
         if (req.url === '/api/led/apply' && req.method === 'POST') {
           let body = ''
           req.on('data', (chunk) => (body += chunk))
@@ -57,15 +62,15 @@ function atasKeyboardPlugin(): Plugin {
 
               const fd = fs.openSync(path, 'w')
 
-              // 1. Handshake 1
+              // Frame 1: Handshake initialization
               sendPacket(fd, [0x55, 0x01])
               sleepSync(15)
 
-              // 2. Handshake 2
+              // Frame 2: Endpoint buffer alignment
               sendPacket(fd, [0x55, 0x05, 0x00, 0x20, 0x20])
               sleepSync(15)
 
-              // 3. Command
+              // Frame 3: Command payload with 8-bit additive checksum
               const cmd = new Array(64).fill(0)
               cmd[0] = 0x55
               cmd[1] = 0x06
@@ -87,7 +92,7 @@ function atasKeyboardPlugin(): Plugin {
               sendPacket(fd, cmd)
               sleepSync(15)
 
-              // 4. End sequence
+              // Frame 4: Transaction terminator
               sendPacket(fd, [0x55, 0x02])
 
               fs.closeSync(fd)
@@ -110,7 +115,6 @@ function atasKeyboardPlugin(): Plugin {
   }
 }
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), atasKeyboardPlugin()],
 })

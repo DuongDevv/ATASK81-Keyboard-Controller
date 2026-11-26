@@ -10,11 +10,11 @@ pub const MAGIC_BYTE: u8 = 0x5A;
 
 #[derive(Error, Debug)]
 pub enum HidDriverError {
-    #[error("Không tìm thấy bàn phím ATAS K81 (0x{0:04X}:0x{1:04X}). Hãy cắm dây Type-C!")]
+    #[error("Device 0x{0:04X}:0x{1:04X} not found. Ensure USB cable is attached.")]
     DeviceNotFound(u16, u16),
-    #[error("Lỗi giao tiếp tầng USB HID: {0}")]
+    #[error("USB HID communication failure: {0}")]
     CommunicationError(String),
-    #[error("Dữ liệu payload vượt quá kích thước frame cho phép ({0} > 57 bytes)")]
+    #[error("Payload exceeds maximum allowable frame size ({0} > 57 bytes)")]
     PayloadTooLarge(usize),
 }
 
@@ -29,7 +29,7 @@ pub struct LedConfigPayload {
 }
 
 pub struct KeyboardController {
-    // Bọc HidDevice trong parking_lot::Mutex bảo đảm hiệu năng cao và no-poisoning
+    // Thread-safe device handle guarded via parking_lot::Mutex (avoids lock poisoning overhead)
     device: Mutex<Option<HidDevice>>,
 }
 
@@ -40,7 +40,7 @@ impl KeyboardController {
         }
     }
 
-    /// Khởi tạo kết nối tới thiết bị
+    // Opens connection to target USB HID vendor/product endpoint
     pub fn connect(&self) -> Result<(), HidDriverError> {
         let api = HidApi::new().map_err(|e| HidDriverError::CommunicationError(e.to_string()))?;
         
@@ -53,7 +53,7 @@ impl KeyboardController {
         Ok(())
     }
 
-    /// Liệt kê các endpoint/interface khả dụng của thiết bị
+    // Enumerates matching device descriptors and interface endpoints
     pub fn list_matching_devices() -> Result<Vec<String>, HidDriverError> {
         let api = HidApi::new().map_err(|e| HidDriverError::CommunicationError(e.to_string()))?;
         let mut devices = Vec::new();
@@ -73,7 +73,7 @@ impl KeyboardController {
         Ok(devices)
     }
 
-    /// Tính mã kiểm tra CRC-16 Modbus (Đảm bảo gói tin không bị nhiễu trên đường truyền USB)
+    // Standard CRC-16 Modbus (polynomial 0xA001) for packet integrity verification
     pub fn calculate_crc16(data: &[u8]) -> u16 {
         let mut crc: u16 = 0xFFFF;
         for &byte in data {
@@ -89,7 +89,7 @@ impl KeyboardController {
         crc
     }
 
-    /// Đóng gói Frame nhị phân 64 Bytes chuẩn quy chuẩn Phase 2
+    // Encapsulates payload into structured 64-byte binary report frame
     pub fn build_packet(&self, cmd: u8, seq_id: u8, payload: &[u8]) -> Result<[u8; PACKET_SIZE], HidDriverError> {
         if payload.len() > 57 {
             return Err(HidDriverError::PayloadTooLarge(payload.len()));
@@ -97,28 +97,26 @@ impl KeyboardController {
 
         let mut packet = [0u8; PACKET_SIZE];
         packet[0] = 0x00;        // Report ID
-        packet[1] = MAGIC_BYTE;  // 0x5A
-        packet[2] = cmd;         // Mã lệnh
-        packet[3] = seq_id;      // Sequence ID chống replay
+        packet[1] = MAGIC_BYTE;  // Magic synchronization byte
+        packet[2] = cmd;         // Command opcode
+        packet[3] = seq_id;      // Sequence ID (anti-replay)
         packet[4] = payload.len() as u8;
 
-        // Copy dữ liệu payload vào mảng từ offset 5
         packet[5..5 + payload.len()].copy_from_slice(payload);
 
-        // Tính CRC16 cho 62 bytes đầu tiên (từ packet[0] đến packet[61])
+        // Compute CRC16 over bytes 0..61 and append at tail
         let checksum = Self::calculate_crc16(&packet[0..62]);
-        packet[62] = (checksum & 0xFF) as u8;        // Byte thấp
-        packet[63] = ((checksum >> 8) & 0xFF) as u8; // Byte cao
+        packet[62] = (checksum & 0xFF) as u8;
+        packet[63] = ((checksum >> 8) & 0xFF) as u8;
 
         Ok(packet)
     }
 
-    /// Gửi cấu hình LED xuống MCU
+    // Dispatches lighting payload to controller endpoint
     pub fn apply_lighting(&self, config: &LedConfigPayload) -> Result<(), HidDriverError> {
         let mut dev_lock = self.device.lock();
         let device = dev_lock.as_mut().ok_or(HidDriverError::DeviceNotFound(ATAS_VID, ATAS_PID))?;
 
-        // Payload quy ước: [mode, brightness, speed, r, g, b]
         let payload = [
             config.mode,
             config.brightness,
@@ -130,7 +128,6 @@ impl KeyboardController {
 
         let packet = self.build_packet(0x02, 0x01, &payload)?;
 
-        // Ghi trực tiếp Feature Report xuống cổng USB HID
         device
             .send_feature_report(&packet)
             .map_err(|e| HidDriverError::CommunicationError(e.to_string()))?;

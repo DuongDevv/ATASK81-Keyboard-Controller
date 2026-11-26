@@ -8,7 +8,7 @@ interface KeyDef {
   width?: number
 }
 
-// Layout ANSI 75% chuẩn cho ATAS K81 (81 phím + Knob)
+// ANSI 75% physical matrix topology for ATAS K81 (81 switches + rotary encoder)
 const KEYBOARD_ROWS: KeyDef[][] = [
   [
     { id: 'k_esc', label: 'ESC' },
@@ -105,7 +105,7 @@ const KEYBOARD_ROWS: KeyDef[][] = [
   ],
 ]
 
-// 12 Chế độ LED chuẩn xác theo vi điều khiển YJS MicroChip của ATAS K81
+// Opcode mapping for YJS MicroChip hardware animation modes (0x00 - 0x0B)
 const FIRMWARE_MODES = [
   { id: 0x06, name: 'Cố định (Fixed / Static)' },
   { id: 0x05, name: 'Nhịp thở (Breathing)' },
@@ -121,7 +121,7 @@ const FIRMWARE_MODES = [
   { id: 0x04, name: 'Đột biến (Mutant)' },
 ]
 
-// Bảng màu nhanh
+// Preset color chips for rapid palette selection
 const QUICK_PALETTE = [
   { name: 'Tím Neon', hex: '#9820CF' },
   { name: 'Hồng Cyber', hex: '#EC4899' },
@@ -140,46 +140,46 @@ function delay(ms: number): Promise<void> {
 }
 
 export default function App() {
-  const [selectedColor, setSelectedColor] = useState<string>('#9820CF') // Mặc định màu tím người dùng thích
-  const [selectedMode, setSelectedMode] = useState<number>(0x06) // Mặc định chế độ tĩnh
+  const [selectedColor, setSelectedColor] = useState<string>('#9820CF')
+  const [selectedMode, setSelectedMode] = useState<number>(0x06)
   const [brightness, setBrightness] = useState<number>(100)
   const [speed, setSpeed] = useState<number>(1)
   const [deviceConnected, setDeviceConnected] = useState<boolean>(false)
-  const [logMessage, setLogMessage] = useState<string>('Đang kiểm tra kết nối phần cứng...')
+  const [logMessage, setLogMessage] = useState<string>('Probing hardware bridge...')
   const [activeDevice, setActiveDevice] = useState<HIDDevice | null>(null)
 
-  // Tự động kiểm tra Native Bridge (kết nối trực tiếp qua Linux /dev/hidraw5)
+  // Probe local Linux character device bridge on mount
   useEffect(() => {
     fetch('/api/led/status')
       .then((r) => r.json())
       .then((data) => {
         if (data.connected) {
           setDeviceConnected(true)
-          setLogMessage(`[+] ĐÃ KẾT NỐI: Phát hiện ATAS K81 tại ${data.path} (Native Bridge)`)
+          setLogMessage(`[+] Connected: ATAS K81 detected at ${data.path} (Native Bridge)`)
         } else {
-          setLogMessage('[*] Native Bridge chưa sẵn sàng. Hãy cắm dây Type-C hoặc dùng WebHID.')
+          setLogMessage('[*] Native Bridge offline. Connect Type-C cable or authorize WebHID.')
         }
       })
       .catch(() => {
-        setLogMessage('Sẵn sàng kết nối qua WebHID...')
+        setLogMessage('Native Bridge unavailable, ready for WebHID handshake.')
       })
   }, [])
 
-  // Kết nối WebHID thủ công nếu không chạy qua Native Bridge
+  // WebHID handshake fallback for environments lacking local fs/udev access
   const connectWebHID = async () => {
     if (!('hid' in navigator)) {
-      setLogMessage('Trình duyệt không hỗ trợ WebHID. Dùng Chrome/Edge/Brave.')
+      setLogMessage('WebHID API unsupported. Please use a Chromium-based browser.')
       return
     }
 
     try {
-      setLogMessage('Đang mở hộp thoại chọn thiết bị...')
+      setLogMessage('Requesting device authorization...')
       const requested = await navigator.hid.requestDevice({
         filters: [{ vendorId: 0x5566, productId: 0x000a }],
       })
 
       if (!requested || requested.length === 0) {
-        setLogMessage('[-] Bạn đã hủy chọn thiết bị.')
+        setLogMessage('[-] Device selection cancelled by user.')
         return
       }
 
@@ -188,6 +188,7 @@ export default function App() {
         (d) => d.vendorId === 0x5566 && d.productId === 0x000a
       )
 
+      // Filter for Vendor-Defined interface (Usage Page 0xFF00)
       let targetDev: HIDDevice = matching[0]
       for (const dev of matching) {
         if (dev.collections?.some((c) => c.usagePage === 0xff00)) {
@@ -203,14 +204,15 @@ export default function App() {
       setActiveDevice(targetDev)
       setDeviceConnected(true)
       setLogMessage(
-        `[+] Đã kết nối WebHID: ${targetDev.productName || 'ATAS K81'} (VID: 0x5566, PID: 0x000A)`
+        `[+] WebHID attached: ${targetDev.productName || 'ATAS K81'} (VID: 0x5566, PID: 0x000A)`
       )
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      setLogMessage(`[-] Lỗi WebHID: ${errMsg}`)
+      setLogMessage(`[-] WebHID error: ${errMsg}`)
     }
   }
 
+  // Dispatch raw 64-byte frame with report ID 0x00 via Output Report
   const sendHidPacket = async (device: HIDDevice, payload: number[]) => {
     const packet = new Uint8Array(64)
     for (let i = 0; i < Math.min(payload.length, 64); i++) {
@@ -224,7 +226,7 @@ export default function App() {
     }
   }
 
-  // Nạp cấu hình màu sang vi điều khiển (Ưu tiên Native Bridge -> Fallback WebHID)
+  // Commit lighting payload down to MCU (Native Bridge -> WebHID fallback)
   const applyLighting = async () => {
     const numColor = parseInt(selectedColor.replace('#', ''), 16)
     const r = (numColor >> 16) & 255
@@ -233,12 +235,13 @@ export default function App() {
     const rawBrightness = Math.round((brightness / 100) * 255)
     let effectiveSpeed = Math.max(1, Math.min(speed, 4))
 
+    // Static and cycle-locked modes enforce speed parameter = 1 to prevent MCU packet drop
     const fixedSpeedModes = [0x04, 0x05, 0x06, 0x07, 0x08, 0x09]
     if (fixedSpeedModes.includes(selectedMode)) effectiveSpeed = 1
 
-    setLogMessage('[*] Đang gửi lệnh nạp cấu hình xuống ATAS K81...')
+    setLogMessage('[*] Dispatching lighting frame to ATAS K81...')
 
-    // CÁCH 1: Thử gửi qua Native Bridge
+    // Attempt direct character device dispatch via Vite middleware bridge
     try {
       const resp = await fetch('/api/led/apply', {
         method: 'POST',
@@ -258,16 +261,16 @@ export default function App() {
         if (resData.success) {
           setDeviceConnected(true)
           setLogMessage(
-            `[+] THÀNH CÔNG! Đã nạp Mode 0x0${selectedMode.toString(16).toUpperCase()}, Màu ${selectedColor.toUpperCase()} xuống cổng ${resData.path}!`
+            `[+] SUCCESS: Applied Mode 0x0${selectedMode.toString(16).toUpperCase()}, Color ${selectedColor.toUpperCase()} via ${resData.path}`
           )
           return
         }
       }
     } catch {
-      // Fallback
+      // Fall through to browser WebHID on network/transport failure
     }
 
-    // CÁCH 2: Fallback qua WebHID
+    // Fallback: Four-step handshake over WebHID interface
     if (activeDevice && activeDevice.opened) {
       try {
         await sendHidPacket(activeDevice, [0x55, 0x01])
@@ -289,6 +292,7 @@ export default function App() {
         cmd[17] = g
         cmd[18] = b
 
+        // Checksum invariant: Sum of bytes 4..63 masked to 8-bit
         let sum = 0
         for (let i = 4; i < 64; i++) sum += cmd[i]
         cmd[3] = sum & 0xff
@@ -297,16 +301,16 @@ export default function App() {
         await delay(15)
         await sendHidPacket(activeDevice, [0x55, 0x02])
 
-        setLogMessage(`[+] THÀNH CÔNG (WebHID)! Đã nạp cấu hình vào vi điều khiển!`)
+        setLogMessage(`[+] SUCCESS (WebHID): Payload committed to controller.`)
         return
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err)
-        setLogMessage(`[-] Lỗi WebHID: ${errMsg}`)
+        setLogMessage(`[-] WebHID transfer error: ${errMsg}`)
         return
       }
     }
 
-    setLogMessage('[!] Chưa kết nối bàn phím. Hãy cắm dây Type-C hoặc bấm "KẾT NỐI ATAS K81"!')
+    setLogMessage('[!] Device unreachable. Ensure Type-C cable is connected.')
   }
 
   return (
@@ -314,7 +318,7 @@ export default function App() {
       <header className="app-header">
         <div className="brand">
           <h1>ATAS K81 <span>PRO CONTROLLER</span></h1>
-          <p className="subtitle">Phần mềm cấu hình Đèn LED & Quản lý Firmware ATAS K81 Chuẩn Doanh Nghiệp</p>
+          <p className="subtitle">Enterprise Hardware LED & Firmware Companion Utility</p>
         </div>
         <div className="header-actions">
           <button
@@ -322,13 +326,13 @@ export default function App() {
             className={`btn-connect ${deviceConnected ? 'connected' : ''}`}
             onClick={connectWebHID}
           >
-            {deviceConnected ? '● ĐÃ KẾT NỐI (ATAS K81)' : '⚡ KẾT NỐI ATAS K81'}
+            {deviceConnected ? '● CONNECTED (ATAS K81)' : '⚡ CONNECT ATAS K81'}
           </button>
         </div>
       </header>
 
       <main className="main-content">
-        {/* Bàn phím ảo 75% Layout - Phát sáng rực rỡ theo màu đã chọn */}
+        {/* Virtual 75% mechanical layout visualizer */}
         <section className="keyboard-stage">
           <div className="keyboard-chassis">
             {KEYBOARD_ROWS.map((row) => (
@@ -358,7 +362,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Bảng điều khiển */}
+        {/* Control and configuration dashboard */}
         <aside className="control-panel">
           <div className="panel-group">
             <h3>1. Chế độ Ánh Sáng (12 Firmware Modes)</h3>
@@ -388,7 +392,7 @@ export default function App() {
               <span className="color-hex">{selectedColor.toUpperCase()}</span>
             </div>
             
-            {/* 8 Nút chọn màu nhanh */}
+            {/* Quick palette buttons */}
             <div className="quick-palette-grid">
               {QUICK_PALETTE.map((c) => (
                 <button
@@ -435,7 +439,7 @@ export default function App() {
             🚀 NẠP CẤU HÌNH VÀO PHÍM (APPLY)
           </button>
 
-          {/* Cẩm Nang Phím Tắt Lưu Vào Flash Onboard */}
+          {/* Flash memory persistence reference */}
           <div className="flash-guide-card">
             <h4>💡 CẨM NANG LƯU MÀU KHI DÙNG KHÔNG DÂY</h4>
             <p className="guide-desc">

@@ -5,8 +5,9 @@ use std::time::Duration;
 
 const MAGIC_BYTE: u8 = 0x55;
 
+// Formats a 65-byte frame: Report ID (0x00) followed by 64-byte payload
 fn build_packet(payload: &[u8]) -> [u8; 65] {
-    let mut buf = [0u8; 65]; // Report ID (0x00) + 64 bytes
+    let mut buf = [0u8; 65];
     buf[0] = 0x00;
     for (i, &b) in payload.iter().enumerate() {
         if i < 64 {
@@ -16,6 +17,7 @@ fn build_packet(payload: &[u8]) -> [u8; 65] {
     buf
 }
 
+// Constructs mode packet with 8-bit additive checksum over bytes 4..63
 fn build_cmd(mode: u8, r: u8, g: u8, b: u8, brightness: u8, speed: u8) -> [u8; 65] {
     let mut payload = [0u8; 64];
     payload[0] = MAGIC_BYTE;
@@ -40,34 +42,35 @@ fn build_cmd(mode: u8, r: u8, g: u8, b: u8, brightness: u8, speed: u8) -> [u8; 6
     build_packet(&payload)
 }
 
+// Executes the four-step handshake sequence against target character device node
 fn test_hidraw(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n[*] Đang thử nghiệm gửi tới {}", path);
+    println!("\n[*] Probing endpoint: {}", path);
     let mut f = OpenOptions::new().read(true).write(true).open(path)?;
 
-    // 1. Handshake 1: 55 01
+    // Step 1: Handshake initialization
     let hs1 = build_packet(&[0x55, 0x01]);
     let w1 = f.write(&hs1)?;
-    println!("    -> Handshake 1 gửi {} bytes", w1);
+    println!("    -> HS1 dispatched ({} bytes)", w1);
     sleep(Duration::from_millis(15));
 
-    // 2. Handshake 2: 55 05 00 20 20
+    // Step 2: Buffer alignment
     let hs2 = build_packet(&[0x55, 0x05, 0x00, 0x20, 0x20]);
     let w2 = f.write(&hs2)?;
-    println!("    -> Handshake 2 gửi {} bytes", w2);
+    println!("    -> HS2 dispatched ({} bytes)", w2);
     sleep(Duration::from_millis(15));
 
-    // 3. Command: Static Cyan (Mode 0x06, R=0, G=255, B=255)
+    // Step 3: Command frame (Static Cyan test)
     let cmd = build_cmd(0x06, 0, 255, 255, 255, 1);
     let w3 = f.write(&cmd)?;
-    println!("    -> Command gửi {} bytes", w3);
+    println!("    -> CMD dispatched ({} bytes)", w3);
     sleep(Duration::from_millis(15));
 
-    // 4. End sequence: 55 02
+    // Step 4: Transaction terminator
     let end = build_packet(&[0x55, 0x02]);
     let w4 = f.write(&end)?;
-    println!("    -> End sequence gửi {} bytes", w4);
+    println!("    -> END dispatched ({} bytes)", w4);
 
-    println!("[+] HOÀN TẤT GỬI TỚI {}!", path);
+    println!("[+] Successfully committed transaction to {}", path);
     Ok(())
 }
 
@@ -75,7 +78,7 @@ fn main() {
     println!("=== ATAS K81 HARDWARE DIAGNOSTIC ===");
     for path in &["/dev/hidraw3", "/dev/hidraw4", "/dev/hidraw5"] {
         if let Err(e) = test_hidraw(path) {
-            eprintln!("[-] Thất bại tại {}: {}", path, e);
+            eprintln!("[-] Error probing {}: {}", path, e);
         }
     }
 }
