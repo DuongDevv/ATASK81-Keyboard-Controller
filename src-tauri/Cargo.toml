@@ -1,0 +1,11 @@
+[package]
+name = "keyboard-setting-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hidapi = "2.6"
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
